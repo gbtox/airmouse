@@ -3,25 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HeadMouse MG24 - Control Seguro</title>
+  <title>HeadMouse MG24 - Ajuste Visual</title>
   <style>
-    :root { --primary: #2563eb; --success: #10b981; --bg: #f8fafc; --card: #ffffff; --text: #0f172a; }
+    :root { --primary: #2563eb; --success: #10b981; --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; }
     * { box-sizing: border-box; font-family: system-ui, sans-serif; }
     body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); display: flex; justify-content: center; }
-    .container { max-width: 820px; width: 100%; display: grid; gap: 20px; }
-    .header { background: var(--card); padding: 20px 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+    .container { max-width: 860px; width: 100%; display: grid; gap: 20px; }
+    .header { background: var(--card); padding: 20px 28px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
     .btn-connect { background: var(--primary); color: white; border: none; padding: 14px 24px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .badge { font-size: 13px; padding: 4px 12px; border-radius: 20px; background: #fee2e2; color: #991b1b; font-weight: 600; }
     .badge.connected { background: #d1fae5; color: #065f46; }
     .main-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; }
     @media (max-width: 720px) { .main-grid { grid-template-columns: 1fr; } }
-    .card { background: var(--card); padding: 24px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
+    .card { background: var(--card); padding: 24px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     .radar-box { display: flex; flex-direction: column; align-items: center; text-align: center; }
-    canvas#radar { background: #f1f5f9; border-radius: 50%; border: 2px solid #cbd5e1; margin: 10px 0; }
-    .control-group { margin-bottom: 20px; }
-    .control-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 6px; }
+    canvas#radar { background: #f8fafc; border-radius: 50%; border: 2px solid #cbd5e1; margin: 10px 0; }
+    .control-group { margin-bottom: 18px; }
+    .control-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
     input[type="range"] { width: 100%; height: 10px; cursor: pointer; }
-    .btn-recal { width: 100%; padding: 16px; background: var(--success); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+    .axis-toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px; }
+    .toggle-btn { padding: 10px 6px; border: 2px solid #cbd5e1; background: #f8fafc; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .toggle-btn.active { border-color: var(--primary); background: #dbeafe; color: #1e40af; }
+    .btn-recal { width: 100%; padding: 15px; background: var(--success); color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px; }
     .disabled-panel { opacity: 0.4; pointer-events: none; }
   </style>
 </head>
@@ -38,14 +41,21 @@
       <h2>🎯 Radar de Movimiento en Vivo</h2>
       <canvas id="radar" width="240" height="240"></canvas>
       <p style="font-size: 13px; color: #64748b;">
-        <strong>Punto Verde:</strong> Posición actual de tu cabeza.<br>
-        <strong>Zona Azul:</strong> Área segura que bloquea temblores.
+        <strong>Punto Verde:</strong> Movimiento de tu cabeza en vivo.<br>
+        <strong>Círculo Azul:</strong> Zona muerta que bloquea temblores.
       </p>
       <button id="btnRecal" class="btn-recal">🔄 Centrar Postura Ahora</button>
     </div>
 
     <div class="card">
-      <h2>🎛️ Calibración Visual</h2>
+      <h2>🧭 Orientación de Ejes (Lentes)</h2>
+      <div class="axis-toggles">
+        <button id="btnInvX" class="toggle-btn" onclick="toggleAxis('x')">↔️ Invertir Izq/Der</button>
+        <button id="btnInvY" class="toggle-btn" onclick="toggleAxis('y')">↕️ Invertir Arr/Aba</button>
+        <button id="btnSwap" class="toggle-btn" onclick="toggleAxis('swap')">🔀 Intercambiar X/Y</button>
+      </div>
+
+      <h2>🎛️ Calibración de Sensibilidad</h2>
       <div class="control-group">
         <div class="control-header"><span>🛡️ Zona Segura (Deadzone)</span><span id="lblDeadzone">2.5°</span></div>
         <input type="range" id="deadzone" min="0" max="12" step="0.5" value="2.5">
@@ -55,12 +65,12 @@
         <input type="range" id="smooth" min="0" max="0.95" step="0.05" value="0.80">
       </div>
       <div class="control-group">
-        <div class="control-header"><span>↔️ Velocidad Horizontal</span><span id="lblSensX">1.2x</span></div>
-        <input type="range" id="sensX" min="0.3" max="3.5" step="0.1" value="1.2">
+        <div class="control-header"><span>↔️ Velocidad Horizontal (X)</span><span id="lblSensX">1.2x</span></div>
+        <input type="range" id="sensX" min="0.3" max="4.0" step="0.1" value="1.2">
       </div>
       <div class="control-group">
-        <div class="control-header"><span>↕️ Velocidad Vertical</span><span id="lblSensY">1.2x</span></div>
-        <input type="range" id="sensY" min="0.3" max="3.5" step="0.1" value="1.2">
+        <div class="control-header"><span>↕️ Velocidad Vertical (Y)</span><span id="lblSensY">1.5x</span></div>
+        <input type="range" id="sensY" min="0.3" max="4.0" step="0.1" value="1.5">
       </div>
     </div>
   </div>
@@ -75,40 +85,37 @@
     sensY:    "19b10004-e8f2-537e-4f6c-d104768a1214",
     recal:    "19b10005-e8f2-537e-4f6c-d104768a1214",
     pin:      "19b10006-e8f2-537e-4f6c-d104768a1214",
-    livePos:  "19b10007-e8f2-537e-4f6c-d104768a1214"
+    livePos:  "19b10007-e8f2-537e-4f6c-d104768a1214",
+    axis:     "19b10008-e8f2-537e-4f6c-d104768a1214"
   };
 
   let chars = {};
   let currentDeadzone = 2.5;
   let headX = 0, headY = 0;
+  let axisState = { x: 0, y: 0, swap: 0 };
 
   const canvas = document.getElementById('radar');
   const ctx = canvas.getContext('2d');
 
   function drawRadar() {
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const cx = canvas.width / 2, cy = canvas.height / 2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Ejes
     ctx.strokeStyle = "#cbd5e1";
     ctx.beginPath();
     ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height);
     ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy);
     ctx.stroke();
 
-    // Zona Segura (Deadzone)
     const radius = Math.max(8, (currentDeadzone / 12) * 95);
     ctx.fillStyle = "rgba(37, 99, 235, 0.18)";
     ctx.strokeStyle = "#2563eb";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    ctx.fill(); ctx.stroke();
 
-    // Punto Verde (Cabeza en tiempo real)
-    const scale = 95 / 12;
+    const scale = 95 / 15;
     const px = Math.max(10, Math.min(canvas.width - 10, cx + (headX * scale)));
     const py = Math.max(10, Math.min(canvas.height - 10, cy + (headY * scale)));
 
@@ -116,14 +123,11 @@
     ctx.beginPath();
     ctx.arc(px, py, 8, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "#065f46";
-    ctx.stroke();
   }
-
   drawRadar();
 
   document.getElementById('btnConnect').addEventListener('click', async () => {
-    const userPin = prompt("Ingresa el PIN de seguridad de los lentes (4 dígitos):");
+    const userPin = prompt("Ingresa el PIN de seguridad (2026):");
     if (!userPin) return;
 
     try {
@@ -139,12 +143,10 @@
         chars[key] = await service.getCharacteristic(UUIDS[key]);
       }
 
-      // Enviar PIN de autenticación
       const pinBuf = new ArrayBuffer(4);
       new DataView(pinBuf).setUint32(0, parseInt(userPin), true);
       await chars.pin.writeValue(pinBuf);
 
-      // Escuchar datos del Radar en vivo
       await chars.livePos.startNotifications();
       chars.livePos.addEventListener('characteristicvaluechanged', (e) => {
         const view = e.target.value;
@@ -158,9 +160,20 @@
       badge.classList.add('connected');
       document.getElementById('mainPanel').classList.remove('disabled-panel');
     } catch (err) {
-      alert("Acceso denegado o PIN incorrecto.");
+      alert("No se pudo conectar: " + err.message);
     }
   });
+
+  async function toggleAxis(type) {
+    axisState[type] = axisState[type] === 0 ? 1 : 0;
+    document.getElementById('btnInvX').classList.toggle('active', axisState.x === 1);
+    document.getElementById('btnInvY').classList.toggle('active', axisState.y === 1);
+    document.getElementById('btnSwap').classList.toggle('active', axisState.swap === 1);
+
+    if (chars.axis) {
+      await chars.axis.writeValue(new Uint8Array([axisState.x, axisState.y, axisState.swap]));
+    }
+  }
 
   async function sendFloat(key, val) {
     if (!chars[key]) return;
@@ -192,8 +205,7 @@
   });
 
   document.getElementById('btnRecal').addEventListener('click', async () => {
-    if (!chars.recal) return;
-    await chars.recal.writeValue(new Uint8Array());
+    if (chars.recal) await chars.recal.writeValue(new Uint8Array());
   });
 </script>
 </body>
