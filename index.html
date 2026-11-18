@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HeadMouse MG24 - Ajuste Visual Completo</title>
+  <title>HeadMouse MG24 - Control Directo</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -12,328 +11,92 @@
       --primary-dark: #1e40af;
       --success: #10b981;
       --success-dark: #059669;
+      --danger: #e11d48;
+      --danger-dark: #be123c;
       --bg: #f8fafc;
       --card: #ffffff;
       --text: #0f172a;
       --muted: #64748b;
       --border: #e2e8f0;
     }
-    
-    * { 
-      box-sizing: border-box; 
-      margin: 0; 
-      padding: 0; 
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-    }
-    
-    body { 
-      background: var(--bg); 
-      color: var(--text); 
-      padding: 24px 16px; 
-      display: flex; 
-      justify-content: center; 
-      min-height: 100vh;
-    }
-    
-    .container { 
-      max-width: 900px; 
-      width: 100%; 
-      display: grid; 
-      gap: 24px; 
-    }
-    
-    /* Encabezado */
-    .header { 
-      background: var(--card); 
-      padding: 20px 28px; 
-      border-radius: 16px; 
-      box-shadow: 0 4px 20px rgba(0,0,0,0.02); 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      flex-wrap: wrap; 
-      gap: 16px;
-      border: 1px solid var(--border);
-    }
-    
-    .title-group h1 { 
-      font-size: 24px; 
-      font-weight: 800;
-      display: flex; 
-      align-items: center; 
-      gap: 12px; 
-    }
-    
-    .badge { 
-      font-size: 13px; 
-      padding: 6px 14px; 
-      border-radius: 20px; 
-      background: #fee2e2; 
-      color: #991b1b; 
-      font-weight: 700; 
-      transition: all 0.3s ease;
-    }
-    
-    .badge.connected { 
-      background: #d1fae5; 
-      color: #065f46; 
-    }
-    
-    .btn-connect { 
-      background: var(--primary); 
-      color: white; 
-      border: none; 
-      padding: 14px 28px; 
-      border-radius: 12px; 
-      font-size: 16px; 
-      font-weight: 700; 
-      cursor: pointer; 
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(37,99,235,0.2);
-    }
-    
-    .btn-connect:hover { 
-      background: var(--primary-dark); 
-      transform: translateY(-1px); 
-    }
-
-    /* Grid de Contenidos */
-    .main-grid { 
-      display: grid; 
-      grid-template-columns: 1fr 1.3fr; 
-      gap: 24px; 
-      transition: opacity 0.3s ease;
-    }
-    
-    @media (max-width: 768px) { 
-      .main-grid { grid-template-columns: 1fr; } 
-    }
-    
-    .card { 
-      background: var(--card); 
-      padding: 28px; 
-      border-radius: 16px; 
-      box-shadow: 0 4px 20px rgba(0,0,0,0.02); 
-      border: 1px solid var(--border);
-    }
-    
-    .card h2 { 
-      margin-bottom: 20px; 
-      font-size: 18px; 
-      font-weight: 700;
-      color: var(--text); 
-      display: flex; 
-      align-items: center; 
-      gap: 10px; 
-    }
-
-    /* Radar Visual */
-    .radar-box { 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center; 
-      justify-content: center; 
-    }
-    
-    canvas#radar { 
-      background: #f8fafc; 
-      border-radius: 50%; 
-      border: 2px solid var(--border); 
-      margin: 16px 0; 
-      box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);
-    }
-    
-    .radar-legend { 
-      font-size: 13px; 
-      color: var(--muted); 
-      text-align: center; 
-      line-height: 1.5; 
-      margin-bottom: 20px;
-    }
-
-    /* Configuración de Ejes */
-    .axis-toggles { 
-      display: grid; 
-      grid-template-columns: repeat(3, 1fr); 
-      gap: 10px; 
-      margin-bottom: 24px; 
-    }
-    
-    .toggle-btn { 
-      padding: 12px 8px; 
-      border: 2px solid var(--border); 
-      background: #f8fafc; 
-      border-radius: 12px; 
-      font-size: 12px; 
-      font-weight: 700; 
-      cursor: pointer; 
-      transition: all 0.2s ease;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-    }
-    
-    .toggle-btn:hover {
-      background: #f1f5f9;
-      border-color: #cbd5e1;
-    }
-    
-    .toggle-btn.active { 
-      border-color: var(--primary); 
-      background: var(--primary-light); 
-      color: var(--primary-dark); 
-    }
-
-    /* Deslizadores */
-    .control-group { 
-      margin-bottom: 22px; 
-    }
-    
-    .control-header { 
-      display: flex; 
-      justify-content: space-between; 
-      font-weight: 700; 
-      margin-bottom: 8px; 
-      font-size: 14px; 
-    }
-    
-    .control-value {
-      color: var(--primary);
-      background: var(--primary-light);
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: 13px;
-    }
-    
-    input[type="range"] { 
-      -webkit-appearance: none;
-      width: 100%; 
-      height: 8px; 
-      border-radius: 4px;
-      background: var(--border); 
-      outline: none;
-    }
-    
-    input[type="range"]::-webkit-slider-thumb { 
-      -webkit-appearance: none;
-      width: 22px; 
-      height: 22px; 
-      border-radius: 50%; 
-      background: var(--primary); 
-      cursor: pointer; 
-      box-shadow: 0 2px 6px rgba(37,99,235,0.3);
-      transition: transform 0.1s ease;
-    }
-    
-    input[type="range"]::-webkit-slider-thumb:active {
-      transform: scale(1.15);
-    }
-
-    /* Botón Recalibrar */
-    .btn-recal { 
-      width: 100%; 
-      padding: 16px; 
-      background: var(--success); 
-      color: white; 
-      border: none; 
-      border-radius: 12px; 
-      font-size: 16px; 
-      font-weight: 700; 
-      cursor: pointer; 
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(16,185,129,0.2);
-    }
-    
-    .btn-recal:hover { 
-      background: var(--success-dark); 
-    }
-    
-    .disabled-panel { 
-      opacity: 0.35; 
-      pointer-events: none; 
-      user-select: none;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 24px 16px; display: flex; justify-content: center; min-height: 100vh; }
+    .container { max-width: 900px; width: 100%; display: grid; gap: 24px; }
+    .header { background: var(--card); padding: 20px 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; border: 1px solid var(--border); }
+    .title-group h1 { font-size: 24px; font-weight: 800; display: flex; align-items: center; gap: 12px; }
+    .badge { font-size: 13px; padding: 6px 14px; border-radius: 20px; background: #fee2e2; color: #991b1b; font-weight: 700; }
+    .badge.connected { background: #d1fae5; color: #065f46; }
+    .btn-connect { background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+    .btn-connect:hover { background: var(--primary-dark); }
+    .main-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; }
+    @media (max-width: 768px) { .main-grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); padding: 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: 1px solid var(--border); }
+    .card h2 { margin-bottom: 20px; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .radar-box { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    canvas#radar { background: #f8fafc; border-radius: 50%; border: 2px solid var(--border); margin: 16px 0; }
+    .radar-legend { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.5; margin-bottom: 20px; }
+    .axis-toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+    .toggle-btn { padding: 12px 8px; border: 2px solid var(--border); background: #f8fafc; border-radius: 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .toggle-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); }
+    .control-group { margin-bottom: 22px; }
+    .control-header { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 8px; font-size: 14px; }
+    .control-value { color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-size: 13px; }
+    input[type="range"] { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 4px; background: var(--border); outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); cursor: pointer; box-shadow: 0 2px 6px rgba(37,99,235,0.3); }
+    .btn-pause { width: 100%; padding: 16px; background: var(--danger); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(225,29,72,0.2); display: flex; justify-content: center; align-items: center; gap: 10px; transition: all 0.2s; }
+    .btn-pause.paused { background: var(--primary); box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+    .btn-recal { width: 100%; padding: 16px; background: var(--success); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .disabled-panel { opacity: 0.35; pointer-events: none; user-select: none; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <!-- Encabezado Seguro -->
   <div class="header">
     <div class="title-group">
-      <h1>👓 Panel HeadMouse <span id="statusBadge" class="badge">Bloqueado</span></h1>
+      <h1>👓 Panel HeadMouse <span id="statusBadge" class="badge">Desconectado</span></h1>
     </div>
-    <button id="btnConnect" class="btn-connect">🔒 Conectar con PIN</button>
+    <button id="btnConnect" class="btn-connect">🔌 Conectar Lentes</button>
   </div>
 
-  <!-- Panel de Control Desbloqueable -->
   <div id="mainPanel" class="main-grid disabled-panel">
-    
-    <!-- Columna Izquierda: Radar Gráfico en Tiempo Real -->
     <div class="card radar-box">
       <h2>🎯 Rastreo de Postura</h2>
       <canvas id="radar" width="240" height="240"></canvas>
       <p class="radar-legend">
-        El <strong>punto verde</strong> indica la inclinación actual.<br>
-        El <strong>área azul</strong> es la zona segura que neutraliza los temblores en reposo.
+        El <strong>punto verde</strong> indica el ángulo de la cabeza.<br>
+        El <strong>área azul</strong> absorbe temblores involuntarios.
       </p>
-      <button id="btnRecal" class="btn-recal">🔄 Resetear Punto Cero</button>
+      <button id="btnPause" class="btn-pause" onclick="togglePause()">⏸️ Pausar Movimiento</button>
+      <button id="btnRecal" class="btn-recal">cn Resetear Punto Cero</button>
     </div>
 
-    <!-- Columna Derecha: Orientaciones Físicas y Rangos -->
     <div class="card">
       <h2>🧭 Alineación Física de los Lentes</h2>
       <div class="axis-toggles">
-        <button id="btnInvX" class="toggle-btn" onclick="toggleAxis(0)">
-          <span>↔️</span>
-          <span>Invertir X</span>
-        </button>
-        <button id="btnInvY" class="toggle-btn" onclick="toggleAxis(1)">
-          <span>↕️</span>
-          <span>Invertir Y</span>
-        </button>
-        <button id="btnSwap" class="toggle-btn" onclick="toggleAxis(2)">
-          <span>🔀</span>
-          <span>Permutar X/Y</span>
-        </button>
+        <button id="btnInvX" class="toggle-btn" onclick="toggleAxis(0)"><span>↔️</span><span>Invertir X</span></button>
+        <button id="btnInvY" class="toggle-btn" onclick="toggleAxis(1)"><span>↕️</span><span>Invertir Y</span></button>
+        <button id="btnSwap" class="toggle-btn" onclick="toggleAxis(2)"><span>🔀</span><span>Permutar X/Y</span></button>
       </div>
 
       <h2>🎛️ Filtros de Calibración Avanzada</h2>
-      
       <div class="control-group">
-        <div class="control-header">
-          <span>🛡️ Umbral Zona Muerta</span>
-          <span id="lblDeadzone" class="control-value">2.5°</span>
-        </div>
+        <div class="control-header"><span>🛡️ Umbral Zona Muerta</span><span id="lblDeadzone" class="control-value">2.5°</span></div>
         <input type="range" id="deadzone" min="0" max="12" step="0.5" value="2.5">
       </div>
-      
       <div class="control-group">
-        <div class="control-header">
-          <span>🌊 Factor de Suavizado</span>
-          <span id="lblSmooth" class="control-value">80%</span>
-        </div>
+        <div class="control-header"><span>🌊 Factor de Suavizado</span><span id="lblSmooth" class="control-value">80%</span></div>
         <input type="range" id="smooth" min="0" max="0.95" step="0.05" value="0.80">
       </div>
-      
       <div class="control-group">
-        <div class="control-header">
-          <span>↔️ Ganancia Horizontal (Eje X)</span>
-          <span id="lblSensX" class="control-value">1.2x</span>
-        </div>
+        <div class="control-header"><span>↔️ Ganancia Horizontal (Eje X)</span><span id="lblSensX" class="control-value">1.2x</span></div>
         <input type="range" id="sensX" min="0.3" max="4.0" step="0.1" value="1.2">
       </div>
-      
       <div class="control-group">
-        <div class="control-header">
-          <span>↕️ Ganancia Vertical (Eje Y)</span>
-          <span id="lblSensY" class="control-value">1.5x</span>
-        </div>
+        <div class="control-header"><span>↕️ Ganancia Vertical (Eje Y)</span><span id="lblSensY" class="control-value">1.5x</span></div>
         <input type="range" id="sensY" min="0.3" max="4.0" step="0.1" value="1.5">
       </div>
     </div>
-    
   </div>
 </div>
 
@@ -345,25 +108,23 @@
     sensX:    "19b10003-e8f2-537e-4f6c-d104768a1214",
     sensY:    "19b10004-e8f2-537e-4f6c-d104768a1214",
     recal:    "19b10005-e8f2-537e-4f6c-d104768a1214",
-    pin:      "19b10006-e8f2-537e-4f6c-d104768a1214",
     livePos:  "19b10007-e8f2-537e-4f6c-d104768a1214",
-    axis:     "19b10008-e8f2-537e-4f6c-d104768a1214"
+    axis:     "19b10008-e8f2-537e-4f6c-d104768a1214",
+    pause:    "19b10009-e8f2-537e-4f6c-d104768a1214"
   };
 
   let chars = {};
   let currentDeadzone = 2.5;
   let headX = 0, headY = 0;
-  let axisState = [0, 0, 0]; // invertX, invertY, swapAxes
+  let axisState = [0, 0, 0];
+  let isPausedState = 0;
 
   const canvas = document.getElementById('radar');
   const ctx = canvas.getContext('2d');
 
   function drawRadar() {
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const cx = canvas.width / 2, cy = canvas.height / 2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Rejilla de cruz central
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -371,37 +132,26 @@
     ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy);
     ctx.stroke();
 
-    // Área visual estática del Umbral de Zona Muerta (Círculo azul)
     const radius = Math.max(6, (currentDeadzone / 12) * 100);
     ctx.fillStyle = "rgba(37, 99, 235, 0.15)";
     ctx.strokeStyle = "rgba(37, 99, 235, 0.7)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    ctx.fill(); ctx.stroke();
 
-    // Graficar la posición angular de la cabeza (Punto Verde)
-    const scale = 100 / 15; // Escalado de grados a píxeles en el canvas
+    const scale = 100 / 15;
     const px = Math.max(8, Math.min(canvas.width - 8, cx + (headX * scale)));
     const py = Math.max(8, Math.min(canvas.height - 8, cy + (headY * scale)));
 
     ctx.fillStyle = "#10b981";
     ctx.beginPath();
     ctx.arc(px, py, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#047857";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.fill(); ctx.stroke();
   }
-
-  // Render inicial del radar sin conexión
   drawRadar();
 
   document.getElementById('btnConnect').addEventListener('click', async () => {
-    const userPin = prompt("Ingresa el PIN de acceso a los lentes (2026):");
-    if (!userPin) return;
-
     try {
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ name: 'HeadMouse-MG24' }],
@@ -415,19 +165,14 @@
         chars[key] = await service.getCharacteristic(UUIDS[key]);
       }
 
-      // Enviar credencial PIN al firmware en formato Little-Endian
-      const pinBuf = new ArrayBuffer(4);
-      new DataView(pinBuf).setUint32(0, parseInt(userPin), true);
-      await chars.pin.writeValue(pinBuf);
-
-      // Sincronizar y descargar el estado real guardado en la Flash de la placa
+      // Descarga directa desde la memoria Flash de la placa
       const dzVal = (await chars.deadzone.readValue()).getFloat32(0, true);
       const smVal = (await chars.smooth.readValue()).getFloat32(0, true);
       const sxVal = (await chars.sensX.readValue()).getFloat32(0, true);
       const syVal = (await chars.sensY.readValue()).getFloat32(0, true);
       const axBuf = await chars.axis.readValue();
+      const pBuf = await chars.pause.readValue();
 
-      // Sincronizar controles físicos de la UI
       currentDeadzone = parseFloat(dzVal.toFixed(1));
       document.getElementById('deadzone').value = currentDeadzone;
       document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
@@ -445,10 +190,11 @@
       document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
       document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
       document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
-      
+
+      isPausedState = pBuf.getUint8(0);
+      updatePauseButtonVisual();
       drawRadar();
 
-      // Habilitar recepción del flujo de datos angulares crudos
       await chars.livePos.startNotifications();
       chars.livePos.addEventListener('characteristicvaluechanged', (e) => {
         const view = e.target.value;
@@ -458,23 +204,41 @@
       });
 
       const badge = document.getElementById('statusBadge');
-      badge.innerText = "Desbloqueado (Flash Ok)";
+      badge.innerText = "Conectado";
       badge.classList.add('connected');
       document.getElementById('mainPanel').classList.remove('disabled-panel');
     } catch (err) {
-      alert("Fallo de sincronización: " + err.message);
+      alert("Conexión cancelada o error de lectura: " + err.message);
     }
   });
+
+  async function togglePause() {
+    isPausedState = isPausedState === 0 ? 1 : 0;
+    updatePauseButtonVisual();
+    if (chars.pause) {
+      await chars.pause.writeValue(new Uint8Array([isPausedState]));
+    }
+  }
+
+  function updatePauseButtonVisual() {
+    const btn = document.getElementById('btnPause');
+    if (isPausedState === 1) {
+      btn.innerText = "▶️ Reanudar Movimiento";
+      btn.classList.add('paused');
+      btn.style.background = "var(--primary)";
+    } else {
+      btn.innerText = "⏸️ Pausar Movimiento";
+      btn.classList.remove('paused');
+      btn.style.background = "var(--danger)";
+    }
+  }
 
   async function toggleAxis(index) {
     axisState[index] = axisState[index] === 0 ? 1 : 0;
     document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
     document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
     document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
-
-    if (chars.axis) {
-      await chars.axis.writeValue(new Uint8Array(axisState));
-    }
+    if (chars.axis) await chars.axis.writeValue(new Uint8Array(axisState));
   }
 
   async function sendFloat(key, val) {
@@ -484,12 +248,10 @@
     await chars[key].writeValue(buf);
   }
 
-  // Captura y transmisión en vivo de deslizadores manuales
   document.getElementById('deadzone').addEventListener('input', (e) => {
     currentDeadzone = parseFloat(e.target.value);
     document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
-    drawRadar();
-    sendFloat('deadzone', currentDeadzone);
+    drawRadar(); sendFloat('deadzone', currentDeadzone);
   });
 
   document.getElementById('smooth').addEventListener('input', (e) => {
@@ -511,7 +273,5 @@
     if (chars.recal) await chars.recal.writeValue(new Uint8Array([1]));
   });
 </script>
-
 </body>
 </html>
-
