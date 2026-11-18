@@ -1,78 +1,339 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HeadMouse MG24 - Ajuste Visual</title>
+  <title>HeadMouse MG24 - Ajuste Visual Completo</title>
   <style>
-    :root { --primary: #2563eb; --success: #10b981; --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; }
-    * { box-sizing: border-box; font-family: system-ui, sans-serif; }
-    body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); display: flex; justify-content: center; }
-    .container { max-width: 860px; width: 100%; display: grid; gap: 20px; }
-    .header { background: var(--card); padding: 20px 28px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
-    .btn-connect { background: var(--primary); color: white; border: none; padding: 14px 24px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
-    .badge { font-size: 13px; padding: 4px 12px; border-radius: 20px; background: #fee2e2; color: #991b1b; font-weight: 600; }
-    .badge.connected { background: #d1fae5; color: #065f46; }
-    .main-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; }
-    @media (max-width: 720px) { .main-grid { grid-template-columns: 1fr; } }
-    .card { background: var(--card); padding: 24px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-    .radar-box { display: flex; flex-direction: column; align-items: center; text-align: center; }
-    canvas#radar { background: #f8fafc; border-radius: 50%; border: 2px solid #cbd5e1; margin: 10px 0; }
-    .control-group { margin-bottom: 18px; }
-    .control-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
-    input[type="range"] { width: 100%; height: 10px; cursor: pointer; }
-    .axis-toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px; }
-    .toggle-btn { padding: 10px 6px; border: 2px solid #cbd5e1; background: #f8fafc; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    .toggle-btn.active { border-color: var(--primary); background: #dbeafe; color: #1e40af; }
-    .btn-recal { width: 100%; padding: 15px; background: var(--success); color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px; }
-    .disabled-panel { opacity: 0.4; pointer-events: none; }
+    :root {
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --primary-dark: #1e40af;
+      --success: #10b981;
+      --success-dark: #059669;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+    }
+    
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+    }
+    
+    body { 
+      background: var(--bg); 
+      color: var(--text); 
+      padding: 24px 16px; 
+      display: flex; 
+      justify-content: center; 
+      min-height: 100vh;
+    }
+    
+    .container { 
+      max-width: 900px; 
+      width: 100%; 
+      display: grid; 
+      gap: 24px; 
+    }
+    
+    /* Encabezado */
+    .header { 
+      background: var(--card); 
+      padding: 20px 28px; 
+      border-radius: 16px; 
+      box-shadow: 0 4px 20px rgba(0,0,0,0.02); 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      flex-wrap: wrap; 
+      gap: 16px;
+      border: 1px solid var(--border);
+    }
+    
+    .title-group h1 { 
+      font-size: 24px; 
+      font-weight: 800;
+      display: flex; 
+      align-items: center; 
+      gap: 12px; 
+    }
+    
+    .badge { 
+      font-size: 13px; 
+      padding: 6px 14px; 
+      border-radius: 20px; 
+      background: #fee2e2; 
+      color: #991b1b; 
+      font-weight: 700; 
+      transition: all 0.3s ease;
+    }
+    
+    .badge.connected { 
+      background: #d1fae5; 
+      color: #065f46; 
+    }
+    
+    .btn-connect { 
+      background: var(--primary); 
+      color: white; 
+      border: none; 
+      padding: 14px 28px; 
+      border-radius: 12px; 
+      font-size: 16px; 
+      font-weight: 700; 
+      cursor: pointer; 
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.2);
+    }
+    
+    .btn-connect:hover { 
+      background: var(--primary-dark); 
+      transform: translateY(-1px); 
+    }
+
+    /* Grid de Contenidos */
+    .main-grid { 
+      display: grid; 
+      grid-template-columns: 1fr 1.3fr; 
+      gap: 24px; 
+      transition: opacity 0.3s ease;
+    }
+    
+    @media (max-width: 768px) { 
+      .main-grid { grid-template-columns: 1fr; } 
+    }
+    
+    .card { 
+      background: var(--card); 
+      padding: 28px; 
+      border-radius: 16px; 
+      box-shadow: 0 4px 20px rgba(0,0,0,0.02); 
+      border: 1px solid var(--border);
+    }
+    
+    .card h2 { 
+      margin-bottom: 20px; 
+      font-size: 18px; 
+      font-weight: 700;
+      color: var(--text); 
+      display: flex; 
+      align-items: center; 
+      gap: 10px; 
+    }
+
+    /* Radar Visual */
+    .radar-box { 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      justify-content: center; 
+    }
+    
+    canvas#radar { 
+      background: #f8fafc; 
+      border-radius: 50%; 
+      border: 2px solid var(--border); 
+      margin: 16px 0; 
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);
+    }
+    
+    .radar-legend { 
+      font-size: 13px; 
+      color: var(--muted); 
+      text-align: center; 
+      line-height: 1.5; 
+      margin-bottom: 20px;
+    }
+
+    /* Configuración de Ejes */
+    .axis-toggles { 
+      display: grid; 
+      grid-template-columns: repeat(3, 1fr); 
+      gap: 10px; 
+      margin-bottom: 24px; 
+    }
+    
+    .toggle-btn { 
+      padding: 12px 8px; 
+      border: 2px solid var(--border); 
+      background: #f8fafc; 
+      border-radius: 12px; 
+      font-size: 12px; 
+      font-weight: 700; 
+      cursor: pointer; 
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .toggle-btn:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    
+    .toggle-btn.active { 
+      border-color: var(--primary); 
+      background: var(--primary-light); 
+      color: var(--primary-dark); 
+    }
+
+    /* Deslizadores */
+    .control-group { 
+      margin-bottom: 22px; 
+    }
+    
+    .control-header { 
+      display: flex; 
+      justify-content: space-between; 
+      font-weight: 700; 
+      margin-bottom: 8px; 
+      font-size: 14px; 
+    }
+    
+    .control-value {
+      color: var(--primary);
+      background: var(--primary-light);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    
+    input[type="range"] { 
+      -webkit-appearance: none;
+      width: 100%; 
+      height: 8px; 
+      border-radius: 4px;
+      background: var(--border); 
+      outline: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb { 
+      -webkit-appearance: none;
+      width: 22px; 
+      height: 22px; 
+      border-radius: 50%; 
+      background: var(--primary); 
+      cursor: pointer; 
+      box-shadow: 0 2px 6px rgba(37,99,235,0.3);
+      transition: transform 0.1s ease;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb:active {
+      transform: scale(1.15);
+    }
+
+    /* Botón Recalibrar */
+    .btn-recal { 
+      width: 100%; 
+      padding: 16px; 
+      background: var(--success); 
+      color: white; 
+      border: none; 
+      border-radius: 12px; 
+      font-size: 16px; 
+      font-weight: 700; 
+      cursor: pointer; 
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(16,185,129,0.2);
+    }
+    
+    .btn-recal:hover { 
+      background: var(--success-dark); 
+    }
+    
+    .disabled-panel { 
+      opacity: 0.35; 
+      pointer-events: none; 
+      user-select: none;
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
+  <!-- Encabezado Seguro -->
   <div class="header">
-    <h1>👓 HeadMouse MG24 <span id="statusBadge" class="badge">Bloqueado</span></h1>
+    <div class="title-group">
+      <h1>👓 Panel HeadMouse <span id="statusBadge" class="badge">Bloqueado</span></h1>
+    </div>
     <button id="btnConnect" class="btn-connect">🔒 Conectar con PIN</button>
   </div>
 
+  <!-- Panel de Control Desbloqueable -->
   <div id="mainPanel" class="main-grid disabled-panel">
+    
+    <!-- Columna Izquierda: Radar Gráfico en Tiempo Real -->
     <div class="card radar-box">
-      <h2>🎯 Radar de Movimiento en Vivo</h2>
+      <h2>🎯 Rastreo de Postura</h2>
       <canvas id="radar" width="240" height="240"></canvas>
-      <p style="font-size: 13px; color: #64748b;">
-        <strong>Punto Verde:</strong> Movimiento de tu cabeza en vivo.<br>
-        <strong>Círculo Azul:</strong> Zona muerta que bloquea temblores.
+      <p class="radar-legend">
+        El <strong>punto verde</strong> indica la inclinación actual.<br>
+        El <strong>área azul</strong> es la zona segura que neutraliza los temblores en reposo.
       </p>
-      <button id="btnRecal" class="btn-recal">🔄 Centrar Postura Ahora</button>
+      <button id="btnRecal" class="btn-recal">🔄 Resetear Punto Cero</button>
     </div>
 
+    <!-- Columna Derecha: Orientaciones Físicas y Rangos -->
     <div class="card">
-      <h2>🧭 Orientación de Ejes (Lentes)</h2>
+      <h2>🧭 Alineación Física de los Lentes</h2>
       <div class="axis-toggles">
-        <button id="btnInvX" class="toggle-btn" onclick="toggleAxis('x')">↔️ Invertir Izq/Der</button>
-        <button id="btnInvY" class="toggle-btn" onclick="toggleAxis('y')">↕️ Invertir Arr/Aba</button>
-        <button id="btnSwap" class="toggle-btn" onclick="toggleAxis('swap')">🔀 Intercambiar X/Y</button>
+        <button id="btnInvX" class="toggle-btn" onclick="toggleAxis(0)">
+          <span>↔️</span>
+          <span>Invertir X</span>
+        </button>
+        <button id="btnInvY" class="toggle-btn" onclick="toggleAxis(1)">
+          <span>↕️</span>
+          <span>Invertir Y</span>
+        </button>
+        <button id="btnSwap" class="toggle-btn" onclick="toggleAxis(2)">
+          <span>🔀</span>
+          <span>Permutar X/Y</span>
+        </button>
       </div>
 
-      <h2>🎛️ Calibración de Sensibilidad</h2>
+      <h2>🎛️ Filtros de Calibración Avanzada</h2>
+      
       <div class="control-group">
-        <div class="control-header"><span>🛡️ Zona Segura (Deadzone)</span><span id="lblDeadzone">2.5°</span></div>
+        <div class="control-header">
+          <span>🛡️ Umbral Zona Muerta</span>
+          <span id="lblDeadzone" class="control-value">2.5°</span>
+        </div>
         <input type="range" id="deadzone" min="0" max="12" step="0.5" value="2.5">
       </div>
+      
       <div class="control-group">
-        <div class="control-header"><span>🌊 Amortiguación de Temblor</span><span id="lblSmooth">80%</span></div>
+        <div class="control-header">
+          <span>🌊 Factor de Suavizado</span>
+          <span id="lblSmooth" class="control-value">80%</span>
+        </div>
         <input type="range" id="smooth" min="0" max="0.95" step="0.05" value="0.80">
       </div>
+      
       <div class="control-group">
-        <div class="control-header"><span>↔️ Velocidad Horizontal (X)</span><span id="lblSensX">1.2x</span></div>
+        <div class="control-header">
+          <span>↔️ Ganancia Horizontal (Eje X)</span>
+          <span id="lblSensX" class="control-value">1.2x</span>
+        </div>
         <input type="range" id="sensX" min="0.3" max="4.0" step="0.1" value="1.2">
       </div>
+      
       <div class="control-group">
-        <div class="control-header"><span>↕️ Velocidad Vertical (Y)</span><span id="lblSensY">1.5x</span></div>
+        <div class="control-header">
+          <span>↕️ Ganancia Vertical (Eje Y)</span>
+          <span id="lblSensY" class="control-value">1.5x</span>
+        </div>
         <input type="range" id="sensY" min="0.3" max="4.0" step="0.1" value="1.5">
       </div>
     </div>
+    
   </div>
 </div>
 
@@ -92,42 +353,53 @@
   let chars = {};
   let currentDeadzone = 2.5;
   let headX = 0, headY = 0;
-  let axisState = { x: 0, y: 0, swap: 0 };
+  let axisState = [0, 0, 0]; // invertX, invertY, swapAxes
 
   const canvas = document.getElementById('radar');
   const ctx = canvas.getContext('2d');
 
   function drawRadar() {
-    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Rejilla de cruz central
     ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height);
     ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy);
     ctx.stroke();
 
-    const radius = Math.max(8, (currentDeadzone / 12) * 95);
-    ctx.fillStyle = "rgba(37, 99, 235, 0.18)";
-    ctx.strokeStyle = "#2563eb";
+    // Área visual estática del Umbral de Zona Muerta (Círculo azul)
+    const radius = Math.max(6, (currentDeadzone / 12) * 100);
+    ctx.fillStyle = "rgba(37, 99, 235, 0.15)";
+    ctx.strokeStyle = "rgba(37, 99, 235, 0.7)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fill(); ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
 
-    const scale = 95 / 15;
-    const px = Math.max(10, Math.min(canvas.width - 10, cx + (headX * scale)));
-    const py = Math.max(10, Math.min(canvas.height - 10, cy + (headY * scale)));
+    // Graficar la posición angular de la cabeza (Punto Verde)
+    const scale = 100 / 15; // Escalado de grados a píxeles en el canvas
+    const px = Math.max(8, Math.min(canvas.width - 8, cx + (headX * scale)));
+    const py = Math.max(8, Math.min(canvas.height - 8, cy + (headY * scale)));
 
     ctx.fillStyle = "#10b981";
     ctx.beginPath();
-    ctx.arc(px, py, 8, 0, Math.PI * 2);
+    ctx.arc(px, py, 7, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = "#047857";
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
+
+  // Render inicial del radar sin conexión
   drawRadar();
 
   document.getElementById('btnConnect').addEventListener('click', async () => {
-    const userPin = prompt("Ingresa el PIN de seguridad (2026):");
+    const userPin = prompt("Ingresa el PIN de acceso a los lentes (2026):");
     if (!userPin) return;
 
     try {
@@ -143,10 +415,40 @@
         chars[key] = await service.getCharacteristic(UUIDS[key]);
       }
 
+      // Enviar credencial PIN al firmware en formato Little-Endian
       const pinBuf = new ArrayBuffer(4);
       new DataView(pinBuf).setUint32(0, parseInt(userPin), true);
       await chars.pin.writeValue(pinBuf);
 
+      // Sincronizar y descargar el estado real guardado en la Flash de la placa
+      const dzVal = (await chars.deadzone.readValue()).getFloat32(0, true);
+      const smVal = (await chars.smooth.readValue()).getFloat32(0, true);
+      const sxVal = (await chars.sensX.readValue()).getFloat32(0, true);
+      const syVal = (await chars.sensY.readValue()).getFloat32(0, true);
+      const axBuf = await chars.axis.readValue();
+
+      // Sincronizar controles físicos de la UI
+      currentDeadzone = parseFloat(dzVal.toFixed(1));
+      document.getElementById('deadzone').value = currentDeadzone;
+      document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
+
+      document.getElementById('smooth').value = smVal.toFixed(2);
+      document.getElementById('lblSmooth').innerText = Math.round(smVal * 100) + "%";
+
+      document.getElementById('sensX').value = sxVal.toFixed(1);
+      document.getElementById('lblSensX').innerText = sxVal.toFixed(1) + "x";
+
+      document.getElementById('sensY').value = syVal.toFixed(1);
+      document.getElementById('lblSensY').innerText = syVal.toFixed(1) + "x";
+
+      axisState = [axBuf.getUint8(0), axBuf.getUint8(1), axBuf.getUint8(2)];
+      document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
+      document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
+      document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
+      
+      drawRadar();
+
+      // Habilitar recepción del flujo de datos angulares crudos
       await chars.livePos.startNotifications();
       chars.livePos.addEventListener('characteristicvaluechanged', (e) => {
         const view = e.target.value;
@@ -156,22 +458,22 @@
       });
 
       const badge = document.getElementById('statusBadge');
-      badge.innerText = "Desbloqueado";
+      badge.innerText = "Desbloqueado (Flash Ok)";
       badge.classList.add('connected');
       document.getElementById('mainPanel').classList.remove('disabled-panel');
     } catch (err) {
-      alert("No se pudo conectar: " + err.message);
+      alert("Fallo de sincronización: " + err.message);
     }
   });
 
-  async function toggleAxis(type) {
-    axisState[type] = axisState[type] === 0 ? 1 : 0;
-    document.getElementById('btnInvX').classList.toggle('active', axisState.x === 1);
-    document.getElementById('btnInvY').classList.toggle('active', axisState.y === 1);
-    document.getElementById('btnSwap').classList.toggle('active', axisState.swap === 1);
+  async function toggleAxis(index) {
+    axisState[index] = axisState[index] === 0 ? 1 : 0;
+    document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
+    document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
+    document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
 
     if (chars.axis) {
-      await chars.axis.writeValue(new Uint8Array([axisState.x, axisState.y, axisState.swap]));
+      await chars.axis.writeValue(new Uint8Array(axisState));
     }
   }
 
@@ -182,6 +484,7 @@
     await chars[key].writeValue(buf);
   }
 
+  // Captura y transmisión en vivo de deslizadores manuales
   document.getElementById('deadzone').addEventListener('input', (e) => {
     currentDeadzone = parseFloat(e.target.value);
     document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
@@ -205,8 +508,10 @@
   });
 
   document.getElementById('btnRecal').addEventListener('click', async () => {
-    if (chars.recal) await chars.recal.writeValue(new Uint8Array());
+    if (chars.recal) await chars.recal.writeValue(new Uint8Array([1]));
   });
 </script>
+
 </body>
 </html>
+
