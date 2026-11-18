@@ -3,21 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HeadMouse MG24 - Control Directo</title>
+  <title>HeadMouse MG24 - Control por Cable</title>
   <style>
     :root {
-      --primary: #2563eb;
-      --primary-light: #dbeafe;
-      --primary-dark: #1e40af;
-      --success: #10b981;
-      --success-dark: #059669;
-      --danger: #e11d48;
-      --danger-dark: #be123c;
-      --bg: #f8fafc;
-      --card: #ffffff;
-      --text: #0f172a;
-      --muted: #64748b;
-      --border: #e2e8f0;
+      --primary: #2563eb; --primary-light: #dbeafe; --primary-dark: #1e40af;
+      --success: #10b981; --success-dark: #059669; --danger: #e11d48;
+      --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
     body { background: var(--bg); color: var(--text); padding: 24px 16px; display: flex; justify-content: center; min-height: 100vh; }
@@ -27,7 +18,6 @@
     .badge { font-size: 13px; padding: 6px 14px; border-radius: 20px; background: #fee2e2; color: #991b1b; font-weight: 700; }
     .badge.connected { background: #d1fae5; color: #065f46; }
     .btn-connect { background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
-    .btn-connect:hover { background: var(--primary-dark); }
     .main-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; }
     @media (max-width: 768px) { .main-grid { grid-template-columns: 1fr; } }
     .card { background: var(--card); padding: 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: 1px solid var(--border); }
@@ -42,9 +32,8 @@
     .control-header { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 8px; font-size: 14px; }
     .control-value { color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-size: 13px; }
     input[type="range"] { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 4px; background: var(--border); outline: none; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); cursor: pointer; box-shadow: 0 2px 6px rgba(37,99,235,0.3); }
-    .btn-pause { width: 100%; padding: 16px; background: var(--danger); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(225,29,72,0.2); display: flex; justify-content: center; align-items: center; gap: 10px; transition: all 0.2s; }
-    .btn-pause.paused { background: var(--primary); box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); cursor: pointer; }
+    .btn-pause { width: 100%; padding: 16px; background: var(--danger); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 12px; display: flex; justify-content: center; align-items: center; gap: 10px; }
     .btn-recal { width: 100%; padding: 16px; background: var(--success); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
     .disabled-panel { opacity: 0.35; pointer-events: none; user-select: none; }
   </style>
@@ -56,7 +45,7 @@
     <div class="title-group">
       <h1>👓 Panel HeadMouse <span id="statusBadge" class="badge">Desconectado</span></h1>
     </div>
-    <button id="btnConnect" class="btn-connect">🔌 Conectar Lentes</button>
+    <button id="btnConnect" class="btn-connect">🔌 Conectar Lentes por USB</button>
   </div>
 
   <div id="mainPanel" class="main-grid disabled-panel">
@@ -68,7 +57,7 @@
         El <strong>área azul</strong> absorbe temblores involuntarios.
       </p>
       <button id="btnPause" class="btn-pause" onclick="togglePause()">⏸️ Pausar Movimiento</button>
-      <button id="btnRecal" class="btn-recal">cn Resetear Punto Cero</button>
+      <button id="btnRecal" class="btn-recal">🔄 Resetear Punto Cero</button>
     </div>
 
     <div class="card">
@@ -101,19 +90,9 @@
 </div>
 
 <script>
-  const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-  const UUIDS = {
-    deadzone: "19b10001-e8f2-537e-4f6c-d104768a1214",
-    smooth:   "19b10002-e8f2-537e-4f6c-d104768a1214",
-    sensX:    "19b10003-e8f2-537e-4f6c-d104768a1214",
-    sensY:    "19b10004-e8f2-537e-4f6c-d104768a1214",
-    recal:    "19b10005-e8f2-537e-4f6c-d104768a1214",
-    livePos:  "19b10007-e8f2-537e-4f6c-d104768a1214",
-    axis:     "19b10008-e8f2-537e-4f6c-d104768a1214",
-    pause:    "19b10009-e8f2-537e-4f6c-d104768a1214"
-  };
-
-  let chars = {};
+  let port;
+  let reader;
+  let inputBuffer = "";
   let currentDeadzone = 2.5;
   let headX = 0, headY = 0;
   let axisState = [0, 0, 0];
@@ -125,111 +104,104 @@
   function drawRadar() {
     const cx = canvas.width / 2, cy = canvas.height / 2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height);
-    ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy);
-    ctx.stroke();
+    ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
 
     const radius = Math.max(6, (currentDeadzone / 12) * 100);
-    ctx.fillStyle = "rgba(37, 99, 235, 0.15)";
-    ctx.strokeStyle = "rgba(37, 99, 235, 0.7)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "rgba(37, 99, 235, 0.15)"; ctx.strokeStyle = "rgba(37, 99, 235, 0.7)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
     const scale = 100 / 15;
     const px = Math.max(8, Math.min(canvas.width - 8, cx + (headX * scale)));
     const py = Math.max(8, Math.min(canvas.height - 8, cy + (headY * scale)));
-
-    ctx.fillStyle = "#10b981";
-    ctx.beginPath();
-    ctx.arc(px, py, 7, 0, Math.PI * 2);
-    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#10b981"; ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
   drawRadar();
 
   document.getElementById('btnConnect').addEventListener('click', async () => {
     try {
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'HeadMouse-MG24' }],
-        optionalServices: [SERVICE_UUID]
-      });
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
 
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(SERVICE_UUID);
+      const badge = document.getElementById('statusBadge');
+      badge.innerText = "Conectado por USB"; badge.classList.add('connected');
+      document.getElementById('mainPanel').classList.remove('disabled-panel');
 
-      for (let key in UUIDS) {
-        chars[key] = await service.getCharacteristic(UUIDS[key]);
-      }
+      // Solicitar la configuración actual guardada en la Flash al conectar
+      await sendSerial("GET");
+      readLoop();
+    } catch (err) {
+      alert("Error al abrir puerto USB: " + err.message);
+    }
+  });
 
-      // Descarga directa desde la memoria Flash de la placa
-      const dzVal = (await chars.deadzone.readValue()).getFloat32(0, true);
-      const smVal = (await chars.smooth.readValue()).getFloat32(0, true);
-      const sxVal = (await chars.sensX.readValue()).getFloat32(0, true);
-      const syVal = (await chars.sensY.readValue()).getFloat32(0, true);
-      const axBuf = await chars.axis.readValue();
-      const pBuf = await chars.pause.readValue();
+  async function readLoop() {
+    const decoder = new TextDecoder();
+    while (port.readable) {
+      reader = port.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          inputBuffer += decoder.decode(value);
+          let lines = inputBuffer.split("\n");
+          inputBuffer = lines.pop();
+          for (let line of lines) { parseSerialLine(line.trim()); }
+        }
+      } catch (err) { console.error(err); } finally { reader.releaseLock(); }
+    }
+  }
 
-      currentDeadzone = parseFloat(dzVal.toFixed(1));
+  function parseSerialLine(line) {
+    if (line.startsWith("R:")) {
+      let parts = line.substring(2).split(",");
+      headX = parseFloat(parts[0]); headY = parseFloat(parts[1]);
+      drawRadar();
+    } else if (line.startsWith("CFG:")) {
+      let parts = line.substring(4).split(",");
+      currentDeadzone = parseFloat(parts[0]);
+      let smVal = parseFloat(parts[1]);
+      let sxVal = parseFloat(parts[2]);
+      let syVal = parseFloat(parts[3]);
+      axisState = [parseInt(parts[4]), parseInt(parts[5]), parseInt(parts[6])];
+      isPausedState = parseInt(parts[7]);
+
       document.getElementById('deadzone').value = currentDeadzone;
       document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
-
-      document.getElementById('smooth').value = smVal.toFixed(2);
+      document.getElementById('smooth').value = smVal;
       document.getElementById('lblSmooth').innerText = Math.round(smVal * 100) + "%";
+      document.getElementById('sensX').value = sxVal;
+      document.getElementById('lblSensX').innerText = sxVal + "x";
+      document.getElementById('sensY').value = syVal;
+      document.getElementById('lblSensY').innerText = syVal + "x";
 
-      document.getElementById('sensX').value = sxVal.toFixed(1);
-      document.getElementById('lblSensX').innerText = sxVal.toFixed(1) + "x";
-
-      document.getElementById('sensY').value = syVal.toFixed(1);
-      document.getElementById('lblSensY').innerText = syVal.toFixed(1) + "x";
-
-      axisState = [axBuf.getUint8(0), axBuf.getUint8(1), axBuf.getUint8(2)];
       document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
       document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
       document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
-
-      isPausedState = pBuf.getUint8(0);
-      updatePauseButtonVisual();
-      drawRadar();
-
-      await chars.livePos.startNotifications();
-      chars.livePos.addEventListener('characteristicvaluechanged', (e) => {
-        const view = e.target.value;
-        headX = view.getFloat32(0, true);
-        headY = view.getFloat32(4, true);
-        drawRadar();
-      });
-
-      const badge = document.getElementById('statusBadge');
-      badge.innerText = "Conectado";
-      badge.classList.add('connected');
-      document.getElementById('mainPanel').classList.remove('disabled-panel');
-    } catch (err) {
-      alert("Conexión cancelada o error de lectura: " + err.message);
+      updatePauseButtonVisual(); drawRadar();
     }
-  });
+  }
+
+  async function sendSerial(cmd) {
+    if (!port || !port.writable) return;
+    const encoder = new TextEncoder();
+    const writer = port.writable.getWriter();
+    await writer.write(encoder.encode(cmd + "\n"));
+    writer.releaseLock();
+  }
 
   async function togglePause() {
     isPausedState = isPausedState === 0 ? 1 : 0;
     updatePauseButtonVisual();
-    if (chars.pause) {
-      await chars.pause.writeValue(new Uint8Array([isPausedState]));
-    }
+    await sendSerial("PA=" + isPausedState);
   }
 
   function updatePauseButtonVisual() {
     const btn = document.getElementById('btnPause');
     if (isPausedState === 1) {
-      btn.innerText = "▶️ Reanudar Movimiento";
-      btn.classList.add('paused');
-      btn.style.background = "var(--primary)";
+      btn.innerText = "▶️ Reanudar Movimiento"; btn.style.background = "var(--primary)";
     } else {
-      btn.innerText = "⏸️ Pausar Movimiento";
-      btn.classList.remove('paused');
-      btn.style.background = "var(--danger)";
+      btn.innerText = "⏸️ Pausar Movimiento"; btn.style.background = "var(--danger)";
     }
   }
 
@@ -238,39 +210,28 @@
     document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
     document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
     document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
-    if (chars.axis) await chars.axis.writeValue(new Uint8Array(axisState));
-  }
-
-  async function sendFloat(key, val) {
-    if (!chars[key]) return;
-    const buf = new ArrayBuffer(4);
-    new DataView(buf).setFloat32(0, parseFloat(val), true);
-    await chars[key].writeValue(buf);
+    await sendSerial("AX=" + axisState[0] + "," + axisState[1] + "," + axisState[2]);
   }
 
   document.getElementById('deadzone').addEventListener('input', (e) => {
     currentDeadzone = parseFloat(e.target.value);
     document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
-    drawRadar(); sendFloat('deadzone', currentDeadzone);
+    drawRadar(); sendSerial("DZ=" + currentDeadzone);
   });
-
   document.getElementById('smooth').addEventListener('input', (e) => {
     document.getElementById('lblSmooth').innerText = Math.round(e.target.value * 100) + "%";
-    sendFloat('smooth', e.target.value);
+    sendSerial("SM=" + e.target.value);
   });
-
   document.getElementById('sensX').addEventListener('input', (e) => {
     document.getElementById('lblSensX').innerText = e.target.value + "x";
-    sendFloat('sensX', e.target.value);
+    sendSerial("SX=" + e.target.value);
   });
-
   document.getElementById('sensY').addEventListener('input', (e) => {
     document.getElementById('lblSensY').innerText = e.target.value + "x";
-    sendFloat('sensY', e.target.value);
+    sendSerial("SY=" + e.target.value);
   });
-
   document.getElementById('btnRecal').addEventListener('click', async () => {
-    if (chars.recal) await chars.recal.writeValue(new Uint8Array([1]));
+    await sendSerial("RC");
   });
 </script>
 </body>
