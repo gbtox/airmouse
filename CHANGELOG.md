@@ -7,9 +7,9 @@ Se configura desde el panel web `index.html` por USB (Web Serial, Chrome o Edge)
 
 | Versión | Firmware | Panel | Estado |
 |---|---|---|---|
-| 2.1 | `Arduino/HeadMouse/HeadMouse.ino` | `index.html` (local) | Compila; en prueba en la placa |
-| 2.0 | (reemplazado por 2.1) | — | Probado: el cursor se mueve bien |
-| 1 | `Arduino/Arduino_v1.txt` (respaldo) | versión publicada en GitHub Pages | Ejes incorrectos para este montaje |
+| 2.1 | `Arduino/HeadMouse/HeadMouse.ino` | `index.html`, publicado en GitHub Pages | Compila; en prueba en la placa |
+| 2.0 | (reemplazado por 2.1) | (reemplazado por 2.1) | Probado: el cursor se mueve bien |
+| 1 | `Arduino/Arduino_v1.txt` (respaldo) | anterior (en el historial de git) | Ejes incorrectos para este montaje |
 
 Para cargar: Arduino IDE, placa *XIAO MG24*, **Herramientas → Protocol stack →
 "BLE (Silabs)"**, librería *Seeed Arduino LSM6DS3* ≥ 2.0.4 (se usa 2.0.8).
