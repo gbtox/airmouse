@@ -8,8 +8,8 @@ Bluetooth (Web Bluetooth), en Chrome o Edge.
 
 | Versión | Firmware | Panel | Estado |
 |---|---|---|---|
-| 2.2 | `Arduino/HeadMouse/HeadMouse.ino` | `index.html` + `asistente.html` + app (PWA) | Compila; probado solo con datos simulados |
-| 2.1 | (reemplazado por 2.2) | publicado en GitHub Pages | Compila; en prueba en la placa |
+| 2.2 | `Arduino/HeadMouse/HeadMouse.ino` | `index.html` + `asistente.html` + app (PWA), publicado en GitHub Pages | Probado en la placa: funciona |
+| 2.1 | (reemplazado por 2.2) | (reemplazado por 2.2) | Probado en la placa |
 | 2.0 | (reemplazado por 2.1) | (reemplazado por 2.1) | Probado: el cursor se mueve bien |
 | 1 | `Arduino/Arduino_v1.txt` (respaldo) | anterior (en el historial de git) | Ejes incorrectos para este montaje |
 
