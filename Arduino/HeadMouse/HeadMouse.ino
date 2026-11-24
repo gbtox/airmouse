@@ -24,7 +24,18 @@
   - Gesto para despertar: N giros bruscos (sobre un umbral de grados/s)
     dentro de 1,5 s, por ejemplo un "no" rapido con la cabeza.
 
-  Protocolo serial (115200, lineas terminadas en \n):
+  v2.2:
+  - Swift Pair: durante 60 s tras encender (o hasta que un PC se conecte) el
+    anuncio BLE lleva el bloque de Microsoft que hace aparecer en Windows la
+    notificacion "Nuevo dispositivo encontrado -> Conectar".
+  - Teclado HID ademas del mouse: la primera vez que se empareja con un PC,
+    abre el asistente del panel (Win+R, "msedge gbtox.github.io/airmouse/asistente").
+  - Servicio BLE de configuracion: el panel puede configurar por Bluetooth
+    (Web Bluetooth) con los mismos comandos que por USB.
+  - Hasta 4 PC emparejados; al llenarse se reemplaza el de uso mas antiguo.
+
+  Protocolo (USB serie a 115200, o BLE: caracteristica CMD para escribir y
+  OUT para recibir notificaciones; lineas terminadas en \n):
     Entrada:  GET | DZ=<dps> | SM=<0..0.95> | GH=<px/grado> | GV=<px/grado>
               PA=<0|1> | RC | CAL=H | CAL=V | INV=H | INV=V
               AX=<ejeH>,<signoH>,<ejeV>,<signoV>   (eje 0=gx 1=gy 2=gz, signo 1|-1)
@@ -35,9 +46,14 @@
               WT=<dps>       umbral de giro brusco para despertar
               WN=<1..4>      cantidad de giros bruscos para despertar
               SL=<0|1>       forzar reposo / despertar desde el panel
+              PAIR           reabrir 60 s el aviso Swift Pair
+              UNPAIR         olvidar todos los PC emparejados
+              OW=<0|1>       abrir el asistente al emparejar un PC nuevo
     Salida:   VER:<v>
               CFG:dz,sm,gh,gv,ejeH,signoH,ejeV,signoV,pausa,calibrado,
-                  ac,at,it,wt,wn,reposo
+                  ac,at,it,wt,wn,reposo,ow
+              ST:PAIR,<0|1>        aviso Swift Pair activo
+              ST:BONDS,<n>         PC emparejados guardados
               R:<h>,<v>,<mult>     velocidad mapeada en grados/s y multiplicador
               ST:SLEEP,<0|1>       entra / sale del reposo
               G:<gx>,<gy>,<gz>     giroscopio crudo sin offset (si RAW=1)
@@ -53,7 +69,8 @@
 #include <math.h>
 
 #define DEVICE_NAME "HeadMouse-MG24"
-#define FW_VERSION  "2.1"
+#define FW_VERSION  "2.2"
+#define WIZARD_CMD  "msedge gbtox.github.io/airmouse/asistente"
 
 #ifndef LED_BUILTIN_ACTIVE
 #define LED_BUILTIN_ACTIVE   LOW
@@ -65,7 +82,7 @@
 #endif
 
 // ---------------------------------------------------------------- Config
-const uint32_t CONFIG_MAGIC = 0x484D3244; // "HM2D": v2.1 (aceleracion y reposo)
+const uint32_t CONFIG_MAGIC = 0x484D3245; // "HM2E": v2.2 (agrega openWizard)
 
 struct ConfigData {
   uint32_t magic;
@@ -83,6 +100,7 @@ struct ConfigData {
   uint16_t idleSec;   // 0 = sin reposo automatico
   float wakeThr;      // grados/s de un giro brusco
   uint8_t wakeCount;  // giros bruscos para despertar
+  uint8_t openWizard; // 1 = abrir el asistente al emparejar un PC nuevo
 };
 ConfigData cfg;
 
@@ -105,6 +123,7 @@ void setDefaults() {
   cfg.idleSec = 30;     // reposo activado por defecto
   cfg.wakeThr = 120.0f;
   cfg.wakeCount = 2;    // "no" rapido: izquierda-derecha
+  cfg.openWizard = 1;
 }
 
 bool configValid() {
@@ -120,6 +139,7 @@ bool configValid() {
   if (cfg.idleSec > 600) return false;
   if (isnan(cfg.wakeThr) || cfg.wakeThr < 30 || cfg.wakeThr > 500) return false;
   if (cfg.wakeCount < 1 || cfg.wakeCount > 4) return false;
+  if (cfg.openWizard > 1) return false;
   return true;
 }
 
@@ -179,12 +199,55 @@ static mouse_data report;
 static uint8_t report_array[3] = { 0, 0, 0 };
 static uint8_t connection_handle = SL_BT_INVALID_CONNECTION_HANDLE;
 static uint32_t bonding_handle = SL_BT_INVALID_BONDING_HANDLE;
-static uint16_t hid_report;
+static uint16_t hid_report;          // reporte de mouse (ID 1)
+static uint16_t hid_kbd;             // reporte de teclado (ID 2)
+static uint16_t cfg_cmd, cfg_out;    // servicio de configuracion
+static bool cfgOutSub = false;       // alguien (el panel) escucha OUT
 static bd_addr ble_address = { { 0, 0, 0, 0, 0, 0 } };
 static uint8_t bleState = 0, bleStateSent = 255;
+static uint8_t advSet = 0xff;
+
+// Swift Pair: ventana tras encender
+const uint32_t PAIR_WINDOW_MS = 60000;
+unsigned long pairWindowUntil = 0;
+bool swiftPairOn = false;
+uint8_t pairSent = 255;
+bool bondsDirty = true;              // reenviar ST:BONDS
+bool newPeer = false;                // la conexion actual aun no estaba emparejada
+volatile bool bondFailMsg = false;
+
+// Apertura del asistente con el teclado
+unsigned long welcomeAt = 0;         // 0 = nada pendiente
+int16_t welcomeStep = -1;            // -1 = inactivo
+unsigned long kbdNext = 0;
 
 static void ble_initialize_gatt_db();
 static void ble_start_advertising();
+void bleNotifyOut(const uint8_t* data, size_t len);
+void openPairWindow();
+
+// Salida doble: todo lo que se imprime va al USB y, si el panel esta
+// suscrito por Bluetooth, tambien a la caracteristica OUT (en trozos de 20
+// bytes, que caben con cualquier MTU).
+class DualOut : public Print {
+ public:
+  bool bleMute = false;
+  size_t write(uint8_t c) override {
+    Serial.write(c);
+    if (!cfgOutSub || bleMute) return 1;
+    if (len < sizeof(buf)) buf[len++] = c;
+    if (c == '\n') flushLine();
+    return 1;
+  }
+  void flushLine() {
+    for (size_t i = 0; i < len; i += 20) bleNotifyOut(buf + i, min((size_t)20, len - i));
+    len = 0;
+  }
+ private:
+  uint8_t buf[96];
+  size_t len = 0;
+};
+DualOut out;
 
 // ---------------------------------------------------------------- Utilidades
 void led(bool on) { digitalWrite(LED_BUILTIN, on ? LED_BUILTIN_ACTIVE : LED_BUILTIN_INACTIVE); }
@@ -207,23 +270,24 @@ void resetMotion() {
 }
 
 void sendConfig() {
-  Serial.print("CFG:");
-  Serial.print(cfg.deadzone, 1);  Serial.print(',');
-  Serial.print(cfg.smoothing, 2); Serial.print(',');
-  Serial.print(cfg.gainH, 0);     Serial.print(',');
-  Serial.print(cfg.gainV, 0);     Serial.print(',');
-  Serial.print(cfg.axisH);        Serial.print(',');
-  Serial.print(cfg.signH);        Serial.print(',');
-  Serial.print(cfg.axisV);        Serial.print(',');
-  Serial.print(cfg.signV);        Serial.print(',');
-  Serial.print(isPaused);         Serial.print(',');
-  Serial.print(cfg.calibrated);   Serial.print(',');
-  Serial.print(cfg.accel, 2);     Serial.print(',');
-  Serial.print(cfg.accelThr, 0);  Serial.print(',');
-  Serial.print(cfg.idleSec);      Serial.print(',');
-  Serial.print(cfg.wakeThr, 0);   Serial.print(',');
-  Serial.print(cfg.wakeCount);    Serial.print(',');
-  Serial.println(sleeping);
+  out.print("CFG:");
+  out.print(cfg.deadzone, 1);  out.print(',');
+  out.print(cfg.smoothing, 2); out.print(',');
+  out.print(cfg.gainH, 0);     out.print(',');
+  out.print(cfg.gainV, 0);     out.print(',');
+  out.print(cfg.axisH);        out.print(',');
+  out.print(cfg.signH);        out.print(',');
+  out.print(cfg.axisV);        out.print(',');
+  out.print(cfg.signV);        out.print(',');
+  out.print(isPaused);         out.print(',');
+  out.print(cfg.calibrated);   out.print(',');
+  out.print(cfg.accel, 2);     out.print(',');
+  out.print(cfg.accelThr, 0);  out.print(',');
+  out.print(cfg.idleSec);      out.print(',');
+  out.print(cfg.wakeThr, 0);   out.print(',');
+  out.print(cfg.wakeCount);    out.print(',');
+  out.print(sleeping);         out.print(',');
+  out.println(cfg.openWizard);
 }
 
 void setSleep(uint8_t s) {
@@ -280,11 +344,11 @@ void calibrateOffset() {
   resetMotion();
   stillCount = 0;
 
-  Serial.print("OFF:");
-  Serial.print(off[0], 2); Serial.print(',');
-  Serial.print(off[1], 2); Serial.print(',');
-  Serial.print(off[2], 2);
-  Serial.println(stable ? "" : ",inestable");
+  out.print("OFF:");
+  out.print(off[0], 2); out.print(',');
+  out.print(off[1], 2); out.print(',');
+  out.print(off[2], 2);
+  out.println(stable ? "" : ",inestable");
   led(bleState == 2);
 }
 
@@ -293,11 +357,11 @@ void startGuidedCal(char target) {
   calTarget = target;
   calIdx = 0;
   resetMotion();
-  Serial.print("CAL:"); Serial.print(target); Serial.println(":GO");
+  out.print("CAL:"); out.print(target); out.println(":GO");
 }
 
 void calError(const char* why) {
-  Serial.print("CAL:"); Serial.print(calTarget); Serial.print(":ERR,"); Serial.println(why);
+  out.print("CAL:"); out.print(calTarget); out.print(":ERR,"); out.println(why);
   calTarget = 0;
 }
 
@@ -333,8 +397,8 @@ void finishGuidedCal() {
     cfg.axisV = best; cfg.signV = sign; cfg.calibrated |= 2;
   }
 
-  Serial.print("CAL:"); Serial.print(calTarget); Serial.print(":OK,");
-  Serial.print(best); Serial.print(','); Serial.println(sign);
+  out.print("CAL:"); out.print(calTarget); out.print(":OK,");
+  out.print(best); out.print(','); out.println(sign);
   calTarget = 0;
   markDirty();
   sendConfig();
@@ -343,9 +407,9 @@ void finishGuidedCal() {
 // ---------------------------------------------------------------- Comandos serie
 void handleCommand(char* c) {
   if (!strcmp(c, "GET")) {
-    Serial.println("VER:" FW_VERSION);
+    out.println("VER:" FW_VERSION);
     sendConfig();
-    bleStateSent = 255;
+    bleStateSent = 255; sleepSent = 255; pairSent = 255; bondsDirty = true;
   } else if (!strncmp(c, "DZ=", 3)) {
     cfg.deadzone = constrain(atof(c + 3), 0.0f, 20.0f); markDirty();
   } else if (!strncmp(c, "SM=", 3)) {
@@ -374,7 +438,7 @@ void handleCommand(char* c) {
       cfg.axisV = av; cfg.signV = sv < 0 ? -1 : 1;
       markDirty(); sendConfig();
     } else {
-      Serial.println("ERR:AX invalido");
+      out.println("ERR:AX invalido");
     }
   } else if (!strncmp(c, "RAW=", 4)) {
     rawStream = atoi(c + 4) != 0;
@@ -390,23 +454,55 @@ void handleCommand(char* c) {
     cfg.wakeCount = constrain(atoi(c + 3), 1, 4); markDirty();
   } else if (!strncmp(c, "SL=", 3)) {
     setSleep(atoi(c + 3) ? 1 : 0);
+  } else if (!strcmp(c, "PAIR")) {
+    openPairWindow();
+  } else if (!strcmp(c, "UNPAIR")) {
+    sl_bt_sm_delete_bondings();
+    bondsDirty = true;
+    if (connection_handle != SL_BT_INVALID_CONNECTION_HANDLE) sl_bt_connection_close(connection_handle);
+    openPairWindow();
+  } else if (!strncmp(c, "OW=", 3)) {
+    cfg.openWizard = atoi(c + 3) ? 1 : 0; markDirty(); sendConfig();
   } else if (!strcmp(c, "RST")) {
     setDefaults(); markDirty(); sendConfig();
   } else {
-    Serial.print("ERR:comando desconocido "); Serial.println(c);
+    out.print("ERR:comando desconocido "); out.println(c);
   }
 }
 
-void pollSerial() {
-  static char buf[48];
-  static uint8_t len = 0;
-  while (Serial.available()) {
-    char ch = (char)Serial.read();
+// Lector de lineas: uno para USB y otro para BLE, asi no se mezclan
+struct LineReader {
+  char buf[48];
+  uint8_t len = 0;
+  void feed(char ch) {
     if (ch == '\n' || ch == '\r') {
       if (len) { buf[len] = 0; handleCommand(buf); len = 0; }
     } else if (len < sizeof(buf) - 1) {
       buf[len++] = ch;
     }
+  }
+};
+LineReader usbReader, bleReader;
+
+// Los comandos por BLE llegan en el contexto del stack Bluetooth; se copian a
+// un anillo y se procesan en loop() (calibrateOffset usa delay, EEPROM, etc.).
+static char bleRx[128];
+static volatile uint8_t bleRxHead = 0, bleRxTail = 0;
+void bleRxPush(const uint8_t* d, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    uint8_t next = (bleRxHead + 1) % sizeof(bleRx);
+    if (next == bleRxTail) return;   // lleno: se descarta el resto
+    bleRx[bleRxHead] = (char)d[i];
+    bleRxHead = next;
+  }
+}
+
+void pollInput() {
+  while (Serial.available()) usbReader.feed((char)Serial.read());
+  while (bleRxTail != bleRxHead) {
+    char ch = bleRx[bleRxTail];
+    bleRxTail = (bleRxTail + 1) % sizeof(bleRx);
+    bleReader.feed(ch);
   }
 }
 
@@ -419,6 +515,78 @@ void sendMouse(int8_t dx, int8_t dy) {
   report.buttons = 0;
   memcpy(report_array, &report, sizeof(report));
   sl_bt_gatt_server_notify_all(hid_report, sizeof(report_array), report_array);
+}
+
+// ---------------------------------------------------------------- Teclado
+// Abre el asistente: Win+R, escribe WIZARD_CMD, Enter. Solo se usan teclas
+// que son iguales en las distribuciones latinoamericana, espanola y de EE. UU.:
+// letras, espacio, el punto de la fila principal y la "/" del teclado numerico.
+void sendKey(uint8_t mod, uint8_t key) {
+  uint8_t r[8] = { mod, 0, key, 0, 0, 0, 0, 0 };
+  sl_bt_gatt_server_notify_all(hid_kbd, sizeof(r), r);
+}
+
+uint8_t usageFor(char ch) {
+  if (ch >= 'a' && ch <= 'z') return 0x04 + (ch - 'a');
+  if (ch == ' ') return 0x2C;
+  if (ch == '.') return 0x37;
+  if (ch == '/') return 0x54;   // "/" del teclado numerico
+  return 0;
+}
+
+// Paso -1 inactivo. 0: Win+R. 1: soltar. 2..: una letra por paso (pulsar y
+// soltar en pasos alternos). Al final: Enter.
+void keyboardTask() {
+  unsigned long now = millis();
+  if (welcomeAt && (long)(now - welcomeAt) >= 0) { welcomeAt = 0; welcomeStep = 0; kbdNext = now; }
+  if (welcomeStep < 0 || (long)(now - kbdNext) < 0) return;
+  if (bleState != 2) { welcomeStep = -1; return; }   // se perdio la conexion
+
+  static const char text[] = WIZARD_CMD;
+  const int16_t nText = sizeof(text) - 1;
+  int16_t s = welcomeStep;
+  if (s == 0)      { sendKey(0x08, 0x15); kbdNext = now + 30; }      // GUI + r
+  else if (s == 1) { sendKey(0, 0);       kbdNext = now + 700; }     // esperar la ventana Ejecutar
+  else if (s < 2 + 2 * nText) {
+    int16_t i = (s - 2) / 2;
+    if ((s - 2) % 2 == 0) sendKey(0, usageFor(text[i])); else sendKey(0, 0);
+    kbdNext = now + 15;
+  }
+  else if (s == 2 + 2 * nText) { sendKey(0, 0x28); kbdNext = now + 30; }  // Enter
+  else { sendKey(0, 0); welcomeStep = -1; out.println("ST:WIZARD,abierto"); return; }
+  welcomeStep++;
+}
+
+// ---------------------------------------------------------------- Emparejamiento
+// Si hay un PC conectado, la ventana se aplica cuando se desconecte.
+void openPairWindow() {
+  pairWindowUntil = millis() + PAIR_WINDOW_MS;
+  if (connection_handle == SL_BT_INVALID_CONNECTION_HANDLE) ble_start_advertising();
+}
+
+void bleNotifyOut(const uint8_t* data, size_t len) {
+  if (cfg_out && cfgOutSub) sl_bt_gatt_server_notify_all(cfg_out, len, data);
+}
+
+void pairTask() {
+  // Al vencer la ventana, quitar el bloque Swift Pair del anuncio
+  if (swiftPairOn && (long)(millis() - pairWindowUntil) >= 0 &&
+      connection_handle == SL_BT_INVALID_CONNECTION_HANDLE) {
+    ble_start_advertising();
+  }
+  if (bondFailMsg) {
+    bondFailMsg = false;
+    out.println("ERR:emparejamiento fallido; quita el dispositivo en el PC y vuelve a agregarlo");
+  }
+  uint8_t p = swiftPairOn ? 1 : 0;
+  if (p != pairSent) { pairSent = p; out.print("ST:PAIR,"); out.println(p); }
+  if (bondsDirty) {
+    bondsDirty = false;
+    uint32_t n = 0; size_t blen = 0; uint8_t bits[4];
+    if (sl_bt_sm_get_bonding_handles(0, &n, sizeof(bits), &blen, bits) == SL_STATUS_OK) {
+      out.print("ST:BONDS,"); out.println(n);
+    }
+  }
 }
 
 void processTick(float dt) {
@@ -436,13 +604,16 @@ void processTick(float dt) {
   float rateV = g[cfg.axisV] * cfg.signV;   // grados/s, + = abajo
 
   if (millis() - lastTelemetry >= 50) {
+    static uint8_t telemN = 0;
     lastTelemetry = millis();
-    Serial.print("R:"); Serial.print(rateH, 1); Serial.print(','); Serial.print(rateV, 1);
-    Serial.print(','); Serial.println(lastMult, 2);
+    out.bleMute = (++telemN & 1);   // por BLE va a 10 Hz para no cargar el enlace del mouse
+    out.print("R:"); out.print(rateH, 1); out.print(','); out.print(rateV, 1);
+    out.print(','); out.println(lastMult, 2);
     if (rawStream) {
-      Serial.print("G:"); Serial.print(g[0], 1); Serial.print(',');
-      Serial.print(g[1], 1); Serial.print(','); Serial.println(g[2], 1);
+      out.print("G:"); out.print(g[0], 1); out.print(',');
+      out.print(g[1], 1); out.print(','); out.println(g[2], 1);
     }
+    out.bleMute = false;
   }
 
   if (calTarget) {
@@ -511,16 +682,18 @@ void setup() {
 
   Serial.begin(115200);
   imuOk = (imu.begin() == 0);
-  if (!imuOk) Serial.println("ERR:IMU no responde");
+  if (!imuOk) out.println("ERR:IMU no responde");
   else calibrateOffset();
 
-  Serial.println("VER:" FW_VERSION);
+  out.println("VER:" FW_VERSION);
   sendConfig();
   lastTick = millis();
 }
 
 void loop() {
-  pollSerial();
+  pollInput();
+  keyboardTask();
+  pairTask();
 
   if (pendingSave && millis() - lastChangeTime > 2000) {
     EEPROM.put(0, cfg);
@@ -529,13 +702,13 @@ void loop() {
 
   if (bleState != bleStateSent) {
     bleStateSent = bleState;
-    Serial.print("ST:BLE,"); Serial.println(bleState);
+    out.print("ST:BLE,"); out.println(bleState);
     led(bleState == 2);
   }
 
   if (sleeping != sleepSent) {
     sleepSent = sleeping;
-    Serial.print("ST:SLEEP,"); Serial.println(sleeping);
+    out.print("ST:SLEEP,"); out.println(sleeping);
     led(bleState == 2);
   }
   // En reposo el LED parpadea breve cada 2 s
@@ -563,19 +736,43 @@ void sl_bt_on_event(sl_bt_msg_t* evt) {
       app_assert_status(sc);
       sc = sl_bt_sm_set_bondable_mode(1);
       app_assert_status(sc);
+      // Hasta 4 PC; al llenarse se reemplaza el que se uso hace mas tiempo (politica 2)
+      sl_bt_sm_store_bonding_configuration(4, 2);
+      pairWindowUntil = millis() + PAIR_WINDOW_MS;
+      bondsDirty = true;
       ble_start_advertising();
       break;
 
     case sl_bt_evt_connection_opened_id:
       connection_handle = evt->data.evt_connection_opened.connection;
       bonding_handle = evt->data.evt_connection_opened.bonding;
+      newPeer = (bonding_handle == SL_BT_INVALID_BONDING_HANDLE);
       bleState = 1;
       sl_bt_sm_increase_security(connection_handle);
+      ble_start_advertising();   // sin Swift Pair y no conectable (visible para Web Bluetooth)
       break;
 
     case sl_bt_evt_sm_bonded_id:
       connection_handle = evt->data.evt_sm_bonded.connection;
       bonding_handle = evt->data.evt_sm_bonded.bonding;
+      bondsDirty = true;
+      // PC nuevo: abrir el asistente cuando Windows termine de instalar el driver
+      if (newPeer && cfg.openWizard) welcomeAt = millis() + 4000;
+      newPeer = false;
+      break;
+
+    case sl_bt_evt_gatt_server_characteristic_status_id:
+      if (evt->data.evt_gatt_server_characteristic_status.characteristic == cfg_out &&
+          evt->data.evt_gatt_server_characteristic_status.status_flags == sl_bt_gatt_server_client_config) {
+        cfgOutSub = evt->data.evt_gatt_server_characteristic_status.client_config_flags != 0;
+      }
+      break;
+
+    case sl_bt_evt_gatt_server_attribute_value_id:
+      if (evt->data.evt_gatt_server_attribute_value.attribute == cfg_cmd) {
+        bleRxPush(evt->data.evt_gatt_server_attribute_value.value.data,
+                  evt->data.evt_gatt_server_attribute_value.value.len);
+      }
       break;
 
     case sl_bt_evt_connection_parameters_id:
@@ -591,16 +788,22 @@ void sl_bt_on_event(sl_bt_msg_t* evt) {
       connection_handle = SL_BT_INVALID_CONNECTION_HANDLE;
       bonding_handle = SL_BT_INVALID_BONDING_HANDLE;
       bleState = 0;
+      cfgOutSub = false;
+      newPeer = false;
+      welcomeAt = 0; welcomeStep = -1;
       // v2: NO se borra el emparejamiento; el PC se reconecta solo.
       ble_start_advertising();
       break;
 
     case sl_bt_evt_sm_bonding_failed_id:
       // Claves desincronizadas (p. ej. el PC recuerda un emparejamiento viejo):
-      // se borran y se cierra para reintentar limpio.
-      sl_bt_sm_delete_bondings();
+      // se borra ese emparejamiento (o todos, si no se sabe cual) y se cierra
+      // para reintentar limpio.
+      if (bonding_handle != SL_BT_INVALID_BONDING_HANDLE) sl_bt_sm_delete_bonding(bonding_handle);
+      else sl_bt_sm_delete_bondings();
+      bondsDirty = true;
       sl_bt_connection_close(evt->data.evt_sm_bonding_failed.connection);
-      Serial.println("ERR:emparejamiento fallido; quita el dispositivo en el PC y vuelve a agregarlo");
+      bondFailMsg = true;   // se informa desde loop()
       break;
 
     default:
@@ -608,21 +811,49 @@ void sl_bt_on_event(sl_bt_msg_t* evt) {
   }
 }
 
+// Anuncio armado a mano:
+//   sin conexion  -> conectable; con el bloque Swift Pair si la ventana esta abierta
+//   con conexion  -> solo escaneable (para que Chrome/Edge lo vean con Web Bluetooth)
 static void ble_start_advertising() {
-  static uint8_t advertising_set_handle = 0xff;
-  static bool init = true;
   sl_status_t sc;
-  if (init) {
-    sc = sl_bt_advertiser_create_set(&advertising_set_handle);
+  if (advSet == 0xff) {
+    sc = sl_bt_advertiser_create_set(&advSet);
     app_assert_status(sc);
-    sc = sl_bt_advertiser_set_timing(advertising_set_handle, 160, 160, 0, 0);
+    sc = sl_bt_advertiser_set_timing(advSet, 160, 160, 0, 0);   // 100 ms
     app_assert_status(sc);
-    init = false;
   }
-  sc = sl_bt_legacy_advertiser_generate_data(advertising_set_handle, sl_bt_advertiser_general_discoverable);
+  sl_bt_advertiser_stop(advSet);   // puede fallar si no estaba activo; da igual
+
+  bool connected = connection_handle != SL_BT_INVALID_CONNECTION_HANDLE;
+  swiftPairOn = !connected && (long)(pairWindowUntil - millis()) > 0;
+
+  uint8_t adv[31];
+  uint8_t n = 0;
+  const uint8_t base[] = {
+    0x02, 0x01, 0x06,               // flags: LE general discoverable, sin BR/EDR
+    0x03, 0x19, 0xC2, 0x03,         // apariencia: mouse
+    0x03, 0x03, 0x12, 0x18          // servicio HID 0x1812
+  };
+  memcpy(adv, base, sizeof(base)); n = sizeof(base);
+  if (swiftPairOn) {
+    // Microsoft Swift Pair: fabricante 0x0006, beacon 0x03, LE 0x00, RSSI reservado 0x80
+    const uint8_t sp[] = { 0x06, 0xFF, 0x06, 0x00, 0x03, 0x00, 0x80 };
+    memcpy(adv + n, sp, sizeof(sp)); n += sizeof(sp);
+  }
+  sc = sl_bt_legacy_advertiser_set_data(advSet, sl_bt_advertiser_advertising_data_packet, n, adv);
   app_assert_status(sc);
-  sc = sl_bt_legacy_advertiser_start(advertising_set_handle, sl_bt_advertiser_connectable_scannable);
+
+  uint8_t rsp[31];
+  uint8_t nameLen = strlen(DEVICE_NAME);
+  rsp[0] = nameLen + 1; rsp[1] = 0x09;   // nombre completo
+  memcpy(rsp + 2, DEVICE_NAME, nameLen);
+  sc = sl_bt_legacy_advertiser_set_data(advSet, sl_bt_advertiser_scan_response_packet, nameLen + 2, rsp);
   app_assert_status(sc);
+
+  sc = sl_bt_legacy_advertiser_start(advSet, connected ? sl_bt_legacy_advertiser_scannable
+                                                       : sl_bt_legacy_advertiser_connectable);
+  // Serial directo: esto puede correr en el contexto del stack BLE
+  if (sc != SL_STATUS_OK) { Serial.print("ERR:anuncio 0x"); Serial.println(sc, HEX); }
 }
 
 // GATT basado en el ejemplo oficial de Silicon Labs (BLE HID mouse), que
@@ -702,18 +933,38 @@ static void ble_initialize_gatt_db() {
   hid_report = characteristic;
 
   const sl_bt_uuid_16_t ref_uuid = { .data = { 0x08, 0x29 } };
-  const uint8_t ref_val[] = { 0x00, 0x01 };   // report ID 0, tipo Input
+  const uint8_t ref_val[] = { 0x01, 0x01 };   // report ID 1 (mouse), tipo Input
   sc = sl_bt_gattdb_add_uuid16_descriptor(session, characteristic, SL_BT_GATTDB_DESCRIPTOR_READ, SL_BT_GATTDB_ENCRYPTED_READ,
                                           ref_uuid, sl_bt_gattdb_fixed_length_value, 2, 2, ref_val, &descriptor);
   app_assert_status(sc);
 
+  // Reporte de teclado (ID 2): modificadores, reservado, 6 teclas
+  const uint8_t kbd_val[8] = { 0 };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(session, service,
+                                              SL_BT_GATTDB_CHARACTERISTIC_READ | SL_BT_GATTDB_CHARACTERISTIC_NOTIFY,
+                                              0, 0, rep_uuid, sl_bt_gattdb_fixed_length_value, 8, 8, kbd_val, &characteristic);
+  app_assert_status(sc);
+  hid_kbd = characteristic;
+  const uint8_t kbd_ref[] = { 0x02, 0x01 };   // report ID 2, tipo Input
+  sc = sl_bt_gattdb_add_uuid16_descriptor(session, characteristic, SL_BT_GATTDB_DESCRIPTOR_READ, SL_BT_GATTDB_ENCRYPTED_READ,
+                                          ref_uuid, sl_bt_gattdb_fixed_length_value, 2, 2, kbd_ref, &descriptor);
+  app_assert_status(sc);
+
   const sl_bt_uuid_16_t map_uuid = { .data = { 0x4B, 0x2A } };
   const uint8_t map_val[] = {
-    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x09, 0x01, 0xA1, 0x00,
+    // Mouse, report ID 1: X, Y (relativos, -128..127) y 3 botones
+    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x85, 0x01, 0x09, 0x01, 0xA1, 0x00,
     0x09, 0x30, 0x09, 0x31, 0x15, 0x80, 0x25, 0x7F, 0x95, 0x02,
     0x75, 0x08, 0x81, 0x06, 0x05, 0x09, 0x19, 0x01, 0x29, 0x03,
     0x15, 0x00, 0x25, 0x01, 0x95, 0x03, 0x75, 0x01, 0x81, 0x02,
-    0x95, 0x01, 0x75, 0x05, 0x81, 0x03, 0xC0, 0xC0
+    0x95, 0x01, 0x75, 0x05, 0x81, 0x03, 0xC0, 0xC0,
+    // Teclado, report ID 2: 8 modificadores, 1 byte reservado, 6 teclas
+    0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x85, 0x02,
+    0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01,
+    0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
+    0x95, 0x01, 0x75, 0x08, 0x81, 0x01,
+    0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65,
+    0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0
   };
   sc = sl_bt_gattdb_add_uuid16_characteristic(session, service, SL_BT_GATTDB_CHARACTERISTIC_READ, SL_BT_GATTDB_ENCRYPTED_READ, 0,
                                               map_uuid, sl_bt_gattdb_fixed_length_value, sizeof(map_val), sizeof(map_val),
@@ -740,6 +991,32 @@ static void ble_initialize_gatt_db() {
 
   sc = sl_bt_gattdb_start_service(session, service);
   app_assert_status(sc);
+
+  // Configuracion por Bluetooth (Web Bluetooth). UUIDs en orden little-endian:
+  //   servicio c2a10001-5b3e-4f7a-9d61-8e4f2b6a1d30
+  //   CMD      c2a10002-...   (el panel escribe comandos de texto)
+  //   OUT      c2a10003-...   (la placa notifica sus lineas de salida)
+  uint8_t cfg_svc_uuid[16] = { 0x30, 0x1d, 0x6a, 0x2b, 0x4f, 0x8e, 0x61, 0x9d,
+                               0x7a, 0x4f, 0x3e, 0x5b, 0x01, 0x00, 0xa1, 0xc2 };
+  sc = sl_bt_gattdb_add_service(session, sl_bt_gattdb_primary_service, 0, 16, cfg_svc_uuid, &service);
+  app_assert_status(sc);
+  uuid_128 cmd_uuid, out_uuid;
+  memcpy(cmd_uuid.data, cfg_svc_uuid, 16); cmd_uuid.data[12] = 0x02;
+  memcpy(out_uuid.data, cfg_svc_uuid, 16); out_uuid.data[12] = 0x03;
+  const uint8_t empty[1] = { 0 };
+  sc = sl_bt_gattdb_add_uuid128_characteristic(session, service,
+                                               SL_BT_GATTDB_CHARACTERISTIC_WRITE | SL_BT_GATTDB_CHARACTERISTIC_WRITE_NO_RESPONSE,
+                                               0, 0, cmd_uuid, sl_bt_gattdb_variable_length_value, 64, 0, empty, &characteristic);
+  app_assert_status(sc);
+  cfg_cmd = characteristic;
+  sc = sl_bt_gattdb_add_uuid128_characteristic(session, service,
+                                               SL_BT_GATTDB_CHARACTERISTIC_READ | SL_BT_GATTDB_CHARACTERISTIC_NOTIFY,
+                                               0, 0, out_uuid, sl_bt_gattdb_variable_length_value, 20, 0, empty, &characteristic);
+  app_assert_status(sc);
+  cfg_out = characteristic;
+  sc = sl_bt_gattdb_start_service(session, service);
+  app_assert_status(sc);
+
   sc = sl_bt_gattdb_commit(session);
   app_assert_status(sc);
 }

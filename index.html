@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HeadMouse MG24 - Panel</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#2563eb">
   <style>
     :root {
       --primary: #2563eb; --primary-light: #dbeafe; --primary-dark: #1e40af;
@@ -17,6 +20,31 @@
     .container { max-width: 960px; width: 100%; display: grid; gap: 20px; align-content: start; }
     .card { background: var(--card); padding: 24px; border-radius: 16px; border: 1px solid var(--border); }
     .card h2 { margin-bottom: 14px; font-size: 18px; font-weight: 700; }
+    .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    /* Asistente */
+    .wiz { position: fixed; inset: 0; background: var(--bg); z-index: 50; display: none; overflow: auto; }
+    .wiz.show { display: block; }
+    .wiz-card { position: relative; z-index: 2; max-width: 720px; margin: 40px auto; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 32px; }
+    @media (max-width: 760px) { .wiz-card { margin: 16px; padding: 20px; } }
+    .wiz-dots { display: flex; gap: 6px; margin-bottom: 20px; }
+    .wiz-dots span { flex: 1; height: 6px; border-radius: 3px; background: var(--border); }
+    .wiz-dots span.done { background: var(--success); }
+    .wiz-dots span.cur { background: var(--primary); }
+    .wiz h2 { font-size: 28px; margin-bottom: 14px; }
+    .wiz p { font-size: 19px; line-height: 1.55; margin-bottom: 12px; }
+    .wiz .hint { font-size: 15px; }
+    .wiz-big { font-size: 32px; font-weight: 800; text-align: center; margin: 20px 0; }
+    .wiz-status { font-size: 20px; font-weight: 700; text-align: center; min-height: 30px; margin: 10px 0; }
+    .wiz-actions { display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap; margin-top: 24px; }
+    .wiz-actions .grow { flex: 1; }
+    .wiz .btn { font-size: 18px; padding: 14px 22px; }
+    .wiz-inline { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 14px 0; }
+    .meter { position: relative; height: 26px; background: var(--bg); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; margin: 10px 0; }
+    .meter .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--border); }
+    .meter .fill { position: absolute; top: 3px; bottom: 3px; border-radius: 10px; background: var(--primary); }
+    .target { position: fixed; z-index: 3; width: 110px; height: 110px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      background: var(--primary-light); border: 4px dashed var(--primary); color: var(--primary-dark); font-weight: 800; font-size: 18px; text-align: center; }
+    .target.hit { background: var(--success-light); border: 4px solid var(--success); color: var(--success-dark); }
     .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .header h1 { font-size: 22px; font-weight: 800; }
     .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
@@ -78,16 +106,23 @@
     <div>
       <h1>👓 Panel HeadMouse</h1>
       <div class="badges">
-        <span id="bUsb" class="badge">USB desconectado</span>
+        <span id="bUsb" class="badge">Sin conexión</span>
         <span id="bBle" class="badge">Bluetooth: —</span>
+        <span id="bPair" class="badge warn" style="display:none">📣 Modo emparejar</span>
         <span id="bVer" class="badge warn" style="display:none"></span>
       </div>
     </div>
-    <button id="btnConnect" class="btn">🔌 Conectar por USB</button>
+    <div class="head-actions">
+      <button id="btnWizard" class="btn secondary">🧭 Asistente</button>
+      <button id="btnInstall" class="btn secondary" style="display:none">📲 Instalar</button>
+      <button id="btnBleConnect" class="btn">🔵 Conectar por Bluetooth</button>
+      <button id="btnConnect" class="btn">🔌 Conectar por USB</button>
+      <button id="btnDisconnect" class="btn secondary" style="display:none">⏏️ Desconectar</button>
+    </div>
   </div>
 
-  <div id="noSerial" class="notice">Este navegador no permite conexión USB serial. Abre el panel en Chrome o Edge de escritorio.</div>
-  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v2.1) para usar la calibración guiada, la aceleración y el reposo.</div>
+  <div id="noSerial" class="notice">Este navegador no permite conectarse a la placa. Abre el panel en <b>Chrome</b> o <b>Edge</b> de escritorio.</div>
+  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v2.2) para usar la calibración guiada, la aceleración, el reposo y el emparejamiento.</div>
 
   <div id="mainPanel" class="stack disabled-panel">
     <div class="grid">
@@ -205,6 +240,40 @@
         <div class="log" id="log"></div>
       </div>
     </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>📶 Bluetooth y emparejamiento</h2>
+        <p class="hint" id="pairState" style="margin-bottom:10px">—</p>
+        <p style="margin-bottom:12px"><b>PC emparejados:</b> <span id="bondCount">—</span> <span class="hint">(máximo 4; al llenarse se reemplaza el que se usó hace más tiempo)</span></p>
+        <div class="stack" style="margin-bottom:12px">
+          <button id="btnPairOpen" class="btn">📣 Emparejar otro PC (60 s)</button>
+          <button id="btnUnpair" class="btn secondary">🗑️ Olvidar todos los PC</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="chkOW"> Abrir este asistente al emparejar un PC nuevo</label>
+        <div class="tip">💡 <b>Para emparejar con un PC con Windows:</b> enchufa la placa cerca del PC (a ~1 m). En el primer minuto aparece el aviso <i>"Nuevo dispositivo encontrado → Conectar"</i>.
+          Si no aparece, revisa que el Bluetooth esté encendido y que esté activada <i>Configuración → Bluetooth y dispositivos → Dispositivos → "Mostrar notificaciones para conectar mediante Swift Pair"</i>.</div>
+      </div>
+
+      <div class="card">
+        <h2>💾 Usar sin internet</h2>
+        <p class="hint" style="margin-bottom:12px">Los ajustes se guardan <b>en la placa</b>: se configuran una vez y sirven en cualquier PC. El panel solo hace falta para cambiarlos.</p>
+        <div class="stack">
+          <button id="btnInstall2" class="btn" style="display:none">📲 Instalar el panel como app</button>
+          <a id="lnkDownload" class="btn secondary" href="index.html" download="HeadMouse-panel.html" style="text-align:center;text-decoration:none">💾 Descargar el panel (archivo)</a>
+        </div>
+        <p class="hint" style="margin-top:10px">Instalado como app, el panel abre sin internet. El archivo descargado se puede copiar a un pendrive y abrir con Chrome o Edge en cualquier PC; desde el archivo la conexión es solo por <b>USB</b>.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="wiz" class="wiz" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
+  <div class="wiz-card">
+    <div class="wiz-dots" id="wizDots"></div>
+    <h2 id="wizTitle"></h2>
+    <div id="wizBody"></div>
+    <div class="wiz-actions" id="wizActions"></div>
   </div>
 </div>
 
@@ -242,53 +311,122 @@
   }
   drawRadar();
 
-  // ---------------- Serial
-  $('btnConnect').addEventListener('click', async () => {
-    if (port) { await disconnect(); return; }
+  // ---------------- Conexión: USB (Web Serial) o Bluetooth (Web Bluetooth)
+  // Ambos transportes entregan texto a feed() y reciben comandos por send().
+  const SVC = 'c2a10001-5b3e-4f7a-9d61-8e4f2b6a1d30';
+  const CHR_CMD = 'c2a10002-5b3e-4f7a-9d61-8e4f2b6a1d30';
+  const CHR_OUT = 'c2a10003-5b3e-4f7a-9d61-8e4f2b6a1d30';
+  const hasSerial = 'serial' in navigator, hasBle = 'bluetooth' in navigator;
+  let link = null;              // { kind: 'usb' | 'ble', write(bytes), close() }
+  let lineBuf = '';
+  const enc = new TextEncoder();
+
+  if (!hasSerial && !hasBle) $('noSerial').classList.add('show');
+  if (!hasSerial) $('btnConnect').disabled = true;
+  if (!hasBle) { $('btnBleConnect').disabled = true; $('btnBleConnect').title = 'Bluetooth requiere Chrome o Edge y el panel abierto desde internet (https), no como archivo.'; }
+
+  function feed(text) {
+    lineBuf += text;
+    const lines = lineBuf.split('\n');
+    lineBuf = lines.pop();
+    for (const l of lines) parseLine(l.trim());
+  }
+
+  async function connectUsb() {
+    if (link) return;
     try {
       port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
       writer = port.writable.getWriter();
-      setBadge('bUsb', 'USB conectado', 'ok');
-      $('btnConnect').textContent = '⏏️ Desconectar';
-      $('mainPanel').classList.remove('disabled-panel');
       keepReading = true;
       readLoop();
-      gotV2 = false;
-      await send('GET');
-      setTimeout(() => { if (port && !gotV2) $('oldFw').classList.add('show'); }, 2500);
+      link = {
+        kind: 'usb',
+        write: (b) => writer.write(b),
+        close: async () => {
+          keepReading = false;
+          try { writer.releaseLock(); } catch (e) {}
+          try { await port.close(); } catch (e) {}
+          port = null; writer = null;
+        }
+      };
+      onLinked();
     } catch (err) {
       port = null;
       if (err.name !== 'NotFoundError') alert('No se pudo abrir el puerto USB: ' + err.message);
     }
-  });
+  }
 
-  navigator.serial && navigator.serial.addEventListener('disconnect', (e) => { if (e.target === port) disconnect(); });
+  async function connectBle() {
+    if (link) return;
+    try {
+      const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'HeadMouse' }], optionalServices: [SVC] });
+      device.addEventListener('gattserverdisconnected', () => { if (link && link.kind === 'ble') onUnlinked(); });
+      const server = await device.gatt.connect();
+      const svc = await server.getPrimaryService(SVC);
+      const cmd = await svc.getCharacteristic(CHR_CMD);
+      const outc = await svc.getCharacteristic(CHR_OUT);
+      const dec = new TextDecoder();
+      outc.addEventListener('characteristicvaluechanged', (e) => feed(dec.decode(e.target.value, { stream: true })));
+      await outc.startNotifications();
+      link = {
+        kind: 'ble',
+        write: async (b) => { for (let i = 0; i < b.length; i += 20) await cmd.writeValueWithoutResponse(b.slice(i, i + 20)); },
+        close: async () => { try { device.gatt.disconnect(); } catch (e) {} }
+      };
+      onLinked();
+    } catch (err) {
+      if (err.name !== 'NotFoundError') {
+        alert('No se pudo conectar por Bluetooth: ' + err.message +
+          '\n\nRevisa que la placa tenga el firmware 2.2 y esté emparejada con este PC. Si sigue fallando, usa el cable USB.');
+      }
+    }
+  }
+
+  async function onLinked() {
+    setBadge('bUsb', link.kind === 'usb' ? 'Conectado por USB' : 'Conectado por Bluetooth', 'ok');
+    ['btnConnect', 'btnBleConnect'].forEach((id) => $(id).style.display = 'none');
+    $('btnDisconnect').style.display = '';
+    $('mainPanel').classList.remove('disabled-panel');
+    lineBuf = '';
+    gotV2 = false;
+    await send('GET');
+    setTimeout(() => { if (link && !gotV2) $('oldFw').classList.add('show'); }, 2500);
+    wizHook('link');
+  }
+
+  function onUnlinked() {
+    link = null;
+    setBadge('bUsb', 'Sin conexión', '');
+    setBadge('bBle', 'Bluetooth: —', '');
+    $('bPair').style.display = 'none';
+    ['btnConnect', 'btnBleConnect'].forEach((id) => $(id).style.display = '');
+    $('btnDisconnect').style.display = 'none';
+    $('mainPanel').classList.add('disabled-panel');
+    wizHook('unlink');
+  }
 
   async function disconnect() {
-    keepReading = false;
-    try { if (writer) { writer.releaseLock(); } } catch (e) {}
-    try { if (port) await port.close(); } catch (e) {}
-    port = null; writer = null;
-    setBadge('bUsb', 'USB desconectado', '');
-    setBadge('bBle', 'Bluetooth: —', '');
-    $('btnConnect').textContent = '🔌 Conectar por USB';
-    $('mainPanel').classList.add('disabled-panel');
+    if (!link) return;
+    const l = link;
+    onUnlinked();
+    await l.close();
   }
+
+  $('btnConnect').addEventListener('click', connectUsb);
+  $('btnBleConnect').addEventListener('click', connectBle);
+  $('btnDisconnect').addEventListener('click', disconnect);
+  hasSerial && navigator.serial.addEventListener('disconnect', (e) => { if (e.target === port && link) disconnect(); });
 
   async function readLoop() {
     const decoder = new TextDecoder();
-    let buf = '';
     while (port && port.readable && keepReading) {
       const reader = port.readable.getReader();
       try {
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop();
-          for (const l of lines) parseLine(l.trim());
+          feed(decoder.decode(value, { stream: true }));
         }
       } catch (e) { console.warn(e); }
       finally { reader.releaseLock(); }
@@ -298,8 +436,9 @@
   // Cola de escritura: evita choques cuando los sliders envían muy seguido
   let sendChain = Promise.resolve();
   function send(cmd) {
-    if (!writer) return Promise.resolve();
-    sendChain = sendChain.then(() => writer.write(new TextEncoder().encode(cmd + '\n'))).catch((e) => log('ERR envío: ' + e.message));
+    if (!link) return Promise.resolve();
+    const l = link;
+    sendChain = sendChain.then(() => l.write(enc.encode(cmd + '\n'))).catch((e) => log('ERR envío: ' + e.message));
     return sendChain;
   }
 
@@ -314,15 +453,24 @@
       mult = parseFloat(p[2]) || 1;
       trackPeak(Math.max(Math.abs(rateH), Math.abs(rateV)));
       drawRadar(); drawCurve();
+      wizHook('rate');
       return;
     }
-    if (line.startsWith('ST:SLEEP,')) { log(line); setSleepUI(parseInt(line.slice(9))); return; }
+    if (line.startsWith('ST:SLEEP,')) { log(line); setSleepUI(parseInt(line.slice(9))); wizHook('line', line); return; }
     if (line.startsWith('G:')) {
       const p = line.slice(2).split(',').map(parseFloat);
       ['x', 'y', 'z'].forEach((a, i) => setRaw(a, p[i] || 0));
       return;
     }
     log(line);
+    wizHook('line', line);
+    if (line.startsWith('ST:PAIR,')) {
+      const on = line.endsWith('1');
+      $('bPair').style.display = on ? '' : 'none';
+      $('pairState').textContent = on ? '📣 Aviso de emparejamiento activo: los PC con Windows cercanos ven "Conectar".' : 'Aviso de emparejamiento apagado.';
+      return;
+    }
+    if (line.startsWith('ST:BONDS,')) { $('bondCount').textContent = line.slice(9); return; }
     if (line.startsWith('VER:')) {
       gotV2 = true; $('oldFw').classList.remove('show');
       setBadge('bVer', 'Firmware ' + line.slice(4), 'ok'); $('bVer').style.display = '';
@@ -358,8 +506,18 @@
       setSlider('WN', parseInt(p[14]), p[14]);
       setSleepUI(parseInt(p[15]));
     }
+    if (p.length >= 17) $('chkOW').checked = p[16] === '1';
+    lastCfg = p;
     drawRadar(); drawCurve();
   }
+  let lastCfg = null;
+
+  // ---------------- Bluetooth / emparejamiento
+  $('btnPairOpen').addEventListener('click', () => send('PAIR'));
+  $('btnUnpair').addEventListener('click', () => {
+    if (confirm('¿Olvidar todos los PC emparejados? Habrá que volver a emparejar la placa en cada PC (y quitarla de Configuración → Bluetooth en Windows).')) send('UNPAIR');
+  });
+  $('chkOW').addEventListener('change', (e) => send('OW=' + (e.target.checked ? 1 : 0)));
 
   // ---------------- Aceleración y reposo
   const peaks = [];
@@ -509,6 +667,325 @@
       calBox('err', T.title, 'No se pudo calibrar', why, 0);
     }
   }
+
+  // ================= Asistente paso a paso =================
+  // Cada paso tiene: title, render() que llena el cuerpo y los botones,
+  // hook(tipo, línea) para reaccionar a la placa, y cleanup() al salir.
+  const wz = { step: 0, timer: null, st: {} };
+  const CAL_WHY = { 'poco movimiento': 'El movimiento fue muy pequeño. Gira un poco más.', 'movimiento mezclado': 'Se mezclaron giros. Intenta un movimiento más puro.', 'mismo eje que horizontal': 'Detectó el mismo eje que el horizontal.', 'mismo eje que vertical': 'Detectó el mismo eje que el vertical.' };
+  const NEEDS_LINK = [2, 3, 4, 5, 6, 7];
+
+  function wizBody(html) { $('wizBody').innerHTML = html; }
+  function wizActions(list) {
+    const box = $('wizActions');
+    box.innerHTML = '';
+    for (const a of list) {
+      if (a === '|') { const s = document.createElement('span'); s.className = 'grow'; box.appendChild(s); continue; }
+      const b = document.createElement('button');
+      b.className = 'btn ' + (a.cls || '');
+      b.textContent = a.label;
+      if (a.id) b.id = a.id;
+      if (a.disabled) b.disabled = true;
+      b.addEventListener('click', a.fn);
+      box.appendChild(b);
+    }
+  }
+  function wizStatus(text) { const el = $('wzStatus'); if (el) el.textContent = text; }
+  function meter(id, v, max) {
+    const el = $(id); if (!el) return;
+    const pct = Math.max(-50, Math.min(50, v / max * 50));
+    el.style.left = (pct < 0 ? 50 + pct : 50) + '%';
+    el.style.width = Math.abs(pct) + '%';
+  }
+  const back = () => ({ label: '← Atrás', cls: 'secondary', fn: () => wizGo(wz.step - 1) });
+  const next = (label, disabled) => ({ label: label || 'Siguiente →', id: 'wzNext', disabled, fn: () => wizGo(wz.step + 1) });
+  const skip = () => ({ label: 'Saltar', cls: 'secondary', fn: () => wizGo(wz.step + 1) });
+  function enableNext() { const b = $('wzNext'); if (b) b.disabled = false; }
+
+  function dirStep(axis) {
+    const H = axis === 'H';
+    return {
+      title: H ? '↔️ Dirección horizontal' : '↕️ Dirección vertical',
+      render() {
+        wz.st = { ok: false, first: 0 };
+        wizBody(`<p>${H ? 'Pide a la persona que <b>gire la cabeza a la DERECHA</b> y vuelva al centro.' : 'Pide a la persona que <b>mire hacia ABAJO</b> y vuelva al centro.'}</p>
+          <div class="wiz-big">${H ? '➡️ Gira a la derecha' : '⬇️ Mira hacia abajo'}</div>
+          <div class="meter"><div class="mid"></div><div class="fill" id="wzMeter"></div></div>
+          <div class="wiz-status" id="wzStatus">Esperando el movimiento…</div>
+          <div class="wiz-inline" id="wzFix"></div>`);
+        wizActions([back(), '|', skip(), next('Siguiente →', true)]);
+      },
+      hook(type, line) {
+        const s = wz.st;
+        if (type === 'rate') {
+          const v = H ? rateH : rateV, o = H ? rateV : rateH;
+          meter('wzMeter', v, 80);
+          if (s.ok || s.cal) return;
+          if (v > 25) { s.ok = true; wizStatus('✅ ¡Bien! El cursor se mueve hacia el lado correcto.'); $('wzFix').innerHTML = ''; enableNext(); }
+          else if (v < -25 && !s.first) { s.first = -1; showFix('↩️ Va al revés.', 'Corregir', () => { send('INV=' + axis); s.first = 0; wizStatus('Corregido. Prueba otra vez.'); $('wzFix').innerHTML = ''; }); }
+          else if (Math.abs(o) > 30 && Math.abs(v) < 10 && !s.first) { s.first = 2; showFix('🤔 Se movió el otro eje.', 'Calibrar este movimiento', startCalStep); }
+        } else if (type === 'line' && line.startsWith('CAL:' + axis + ':')) {
+          if (line.includes(':OK')) { s.cal = false; s.ok = true; wizStatus('✅ Calibrado. El cursor ya sigue este movimiento.'); $('wzFix').innerHTML = ''; enableNext(); }
+          else if (line.includes(':ERR')) { s.cal = false; s.first = 0; wizStatus('⚠️ ' + (CAL_WHY[line.split(',')[1]] || 'No se pudo calibrar.') + ' Intenta de nuevo.'); }
+        }
+      }
+    };
+    function showFix(msg, label, fn) {
+      wizStatus(msg);
+      $('wzFix').innerHTML = '';
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = label; b.onclick = fn;
+      $('wzFix').appendChild(b);
+    }
+    function startCalStep() {
+      wz.st.cal = true;
+      $('wzFix').innerHTML = '';
+      let n = 3;
+      wizStatus('Quieto… ' + n);
+      clearInterval(wz.timer);
+      wz.timer = setInterval(() => {
+        n--;
+        if (n > 0) { wizStatus('Quieto… ' + n); return; }
+        clearInterval(wz.timer);
+        send('CAL=' + axis);
+        wizStatus(H ? '¡Ahora! Gira a la derecha y vuelve (3 s)' : '¡Ahora! Mira abajo y vuelve (3 s)');
+      }, 1000);
+    }
+  }
+
+  const STEPS = [
+    { // 0
+      title: '👋 Bienvenida',
+      render() {
+        wizBody(`<p>Este asistente ajusta el <b>HeadMouse</b> en unos 5 minutos.</p>
+          <p>Necesitas a la persona sentada cómoda frente a la pantalla, con los lentes puestos, y a alguien que la acompañe con el teclado o el mouse.</p>
+          <p class="hint">Los ajustes se guardan en la placa: sirven en cualquier PC.</p>`);
+        wizActions([{ label: 'Cerrar', cls: 'secondary', fn: closeWizard }, '|', next('Comenzar →')]);
+      }
+    },
+    { // 1
+      title: '🔗 Conectar con la placa',
+      render() {
+        if (link) {
+          wizBody(`<div class="wiz-big">✅ Conectado por ${link.kind === 'usb' ? 'USB' : 'Bluetooth'}</div>`);
+          wizActions([back(), '|', next()]);
+          return;
+        }
+        wizBody(`<p>Para ajustarla, el panel tiene que conectarse a la placa.</p>
+          <div class="wiz-inline">
+            ${hasBle ? '<button class="btn" id="wzBle">🔵 Por Bluetooth</button>' : ''}
+            ${hasSerial ? '<button class="btn" id="wzUsb">🔌 Por cable USB</button>' : ''}
+          </div>
+          <p class="hint"><b>Bluetooth:</b> elige "HeadMouse-MG24" en la lista. <b>USB:</b> conecta el cable y elige el puerto de la placa.</p>
+          ${!hasBle && !hasSerial ? '<p>⚠️ Este navegador no puede conectarse. Abre el panel en Chrome o Edge.</p>' : ''}`);
+        if ($('wzBle')) $('wzBle').onclick = connectBle;
+        if ($('wzUsb')) $('wzUsb').onclick = connectUsb;
+        wizActions([back(), '|', { label: 'Seguir sin conectar', cls: 'secondary', fn: () => wizGo(STEPS.length - 1) }]);
+      },
+      hook(type) { if (type === 'link') wizRender(); }
+    },
+    { // 2
+      title: '🎯 Punto cero',
+      render() {
+        wizBody(`<p>Pide a la persona que <b>mire al centro de la pantalla</b> y se quede quieta unos segundos.</p>
+          <div class="wiz-big">🙂</div><div class="wiz-status" id="wzStatus"></div>`);
+        wizActions([back(), '|', { label: 'Medir punto cero', fn: () => { send('RC'); wizStatus('Midiendo… quieto'); } }, next('Siguiente →', true)]);
+      },
+      hook(type, line) {
+        if (type !== 'line' || !line.startsWith('OFF:')) return;
+        if (line.includes('inestable')) wizStatus('⚠️ Se movió un poco. Intenta de nuevo.');
+        else { wizStatus('✅ Listo'); enableNext(); }
+      }
+    },
+    dirStep('H'), // 3
+    dirStep('V'), // 4
+    { // 5
+      title: '🫧 Movimientos involuntarios',
+      render() {
+        wz.st = { peak: 0, running: false };
+        wizBody(`<p>Durante <b>15 segundos</b>, la persona se queda relajada mirando la pantalla, como lo haría normalmente.</p>
+          <p class="hint">Así medimos sus movimientos sin querer, para que no despierten el cursor por error.</p>
+          <div class="wiz-big" id="wzCount">15</div><div class="wiz-status" id="wzStatus"></div><div class="wiz-inline" id="wzFix"></div>`);
+        wizActions([back(), '|', skip(), { label: 'Empezar', id: 'wzGo', fn: run }, next('Siguiente →', true)]);
+        function run() {
+          wz.st = { peak: 0, running: true };
+          $('wzGo').disabled = true;
+          const t0 = Date.now();
+          clearInterval(wz.timer);
+          wz.timer = setInterval(() => {
+            const left = 15 - Math.floor((Date.now() - t0) / 1000);
+            $('wzCount').textContent = Math.max(0, left);
+            if (left > 0) return;
+            clearInterval(wz.timer);
+            wz.st.running = false;
+            $('wzGo').disabled = false;
+            const pk = Math.round(wz.st.peak);
+            const sug = Math.min(300, Math.max(120, Math.ceil(pk * 1.3 / 10) * 10));
+            wizStatus(`Movimiento más rápido: ${pk} °/s → umbral para despertar sugerido: ${sug} °/s`);
+            const fix = $('wzFix'); fix.innerHTML = '';
+            const b = document.createElement('button'); b.className = 'btn'; b.textContent = `Aplicar ${sug} °/s`;
+            b.onclick = () => { send('WT=' + sug); wakeThr = sug; setSlider('WT', sug, sug + ' °/s'); b.disabled = true; b.textContent = '✅ Aplicado'; };
+            fix.appendChild(b);
+            if (pk * 1.3 > 300) {
+              const b3 = document.createElement('button'); b3.className = 'btn secondary'; b3.textContent = 'Pedir 3 giros para despertar';
+              b3.onclick = () => { send('WN=3'); setSlider('WN', 3, '3'); b3.disabled = true; b3.textContent = '✅ 3 giros'; };
+              fix.appendChild(b3);
+            }
+            enableNext();
+          }, 200);
+        }
+      },
+      hook(type) { if (type === 'rate' && wz.st.running) wz.st.peak = Math.max(wz.st.peak, Math.abs(rateH), Math.abs(rateV)); }
+    },
+    { // 6
+      title: '🏁 Velocidad',
+      render() {
+        const gh = lastCfg ? parseFloat(lastCfg[2]) : 40, ac = lastCfg && lastCfg.length >= 11 ? parseFloat(lastCfg[10]) : 1;
+        wizBody(`<p>Lleva el cursor con la cabeza a cada <b>círculo</b>. Si cuesta llegar a los bordes, sube la velocidad o la aceleración.</p>
+          <p class="hint">💡 Truco: vuelve <i>lento</i> hacia el lado contrario y gira <i>rápido</i> hacia el borde.</p>
+          <div class="control-group"><div class="control-header"><span>Velocidad</span><span class="val" id="wzGl">${gh} px/°</span></div>
+            <input type="range" id="wzG" min="10" max="150" step="5" value="${gh}"></div>
+          <div class="control-group"><div class="control-header"><span>Aceleración</span><span class="val" id="wzAl">${ac.toFixed(1)}</span></div>
+            <input type="range" id="wzA" min="0" max="3" step="0.1" value="${ac}"></div>
+          <div class="wiz-status" id="wzStatus">0 de 6</div>`);
+        const sg = throttled((v) => { send('GH=' + v); send('GV=' + v); }, 150);
+        const sa = throttled((v) => send('AC=' + v), 150);
+        $('wzG').oninput = (e) => { const v = e.target.value; $('wzGl').textContent = v + ' px/°'; setSlider('GH', v, v + ' px/°'); setSlider('GV', v, v + ' px/°'); sg(v); };
+        $('wzA').oninput = (e) => { const v = parseFloat(e.target.value); $('wzAl').textContent = v.toFixed(1); accel = v; setSlider('AC', v, v.toFixed(1)); drawCurve(); sa(v); };
+        placeTargets();
+        wizActions([back(), '|', { label: 'Repetir', cls: 'secondary', fn: placeTargets }, next()]);
+      },
+      cleanup: clearTargets
+    },
+    { // 7
+      title: '⚡ Gesto para despertar',
+      render() {
+        wz.st = { slept: false, done: false };
+        wizBody(`<p>Después de un rato sin uso, el cursor se congela. Para despertarlo, la persona hace un <b>"no" rápido</b> con la cabeza.</p>
+          <div class="wiz-big" id="wzBig">Probemos</div>
+          <div class="meter"><div class="mid" id="wzThr" style="left:50%;background:var(--danger)"></div><div class="fill" id="wzMeter"></div></div>
+          <div class="wiz-status" id="wzStatus"></div>`);
+        wizActions([back(), '|', skip(), { label: 'Poner en reposo', id: 'wzSl', fn: () => send('SL=1') }, next('Siguiente →', true)]);
+        $('wzThr').style.left = Math.min(98, wakeThr / 320 * 100) + '%';
+      },
+      hook(type, line) {
+        if (type === 'rate') {
+          const pk = Math.max(Math.abs(rateH), Math.abs(rateV));
+          const el = $('wzMeter'); if (el) { el.style.left = '0'; el.style.width = Math.min(100, pk / 320 * 100) + '%'; el.style.background = pk >= wakeThr ? 'var(--danger)' : '#f59e0b'; }
+        } else if (line === 'ST:SLEEP,1') {
+          wz.st.slept = true;
+          $('wzBig').textContent = '💤 En reposo';
+          wizStatus('Ahora: un "no" rápido con la cabeza. La barra debe pasar la línea roja.');
+        } else if (line === 'ST:SLEEP,0' && wz.st.slept && !wz.st.done) {
+          wz.st.done = true;
+          $('wzBig').textContent = '✅ ¡Despertó!';
+          wizStatus('');
+          enableNext();
+        }
+      },
+      cleanup() { if (sleeping) send('SL=0'); }
+    },
+    { // 8
+      title: '🎉 ¡Listo!',
+      render() {
+        const p = lastCfg || [];
+        const row = (k, v) => `<tr><td style="padding:4px 12px 4px 0">${k}</td><td><b>${v}</b></td></tr>`;
+        wizBody(`<p>${link ? 'Los ajustes ya quedaron <b>guardados en la placa</b>.' : 'Sin conexión: la placa sigue con sus ajustes actuales.'}</p>
+          ${p.length >= 16 ? `<table style="font-size:17px;margin:8px 0 14px">${row('Velocidad', p[2] + ' / ' + p[3] + ' px/°')}${row('Aceleración', p[10])}${row('Zona muerta', p[0] + ' °/s')}${row('Reposo tras', fmtIT(p[12]))}${row('Despertar', p[14] + ' giros sobre ' + p[13] + ' °/s')}</table>` : ''}
+          <p class="hint">Puedes volver a este asistente cuando quieras con el botón 🧭 Asistente.</p>
+          ${deferredPrompt ? '<div class="wiz-inline"><button class="btn secondary" id="wzInstall">📲 Instalar el panel como app (funciona sin internet)</button></div>' : ''}`);
+        if ($('wzInstall')) $('wzInstall').onclick = installApp;
+        if (link) send('GET');
+        wizActions([back(), '|', { label: 'Terminar', cls: 'success', fn: closeWizard }]);
+      },
+      hook(type, line) { if (type === 'line' && line.startsWith('CFG:') && !wz.st.refreshed) { wz.st.refreshed = true; wizRender(); } }
+    }
+  ];
+
+  function wizRender() {
+    const i = wz.step;
+    $('wizDots').innerHTML = STEPS.map((_, k) => `<span class="${k < i ? 'done' : k === i ? 'cur' : ''}"></span>`).join('');
+    if (NEEDS_LINK.includes(i) && !link) {
+      $('wizTitle').textContent = '🔗 Se perdió la conexión';
+      wizBody('<p>Vuelve a conectar la placa para seguir.</p>');
+      wizActions([{ label: 'Conectar', fn: () => wizGo(1) }]);
+      return;
+    }
+    $('wizTitle').textContent = STEPS[i].title;
+    STEPS[i].render();
+  }
+  function wizGo(n) {
+    const cur = STEPS[wz.step];
+    clearInterval(wz.timer);
+    if (cur && cur.cleanup) cur.cleanup();
+    wz.step = Math.max(0, Math.min(STEPS.length - 1, n));
+    wz.st = {};
+    wizRender();
+  }
+  function wizHook(type, line) {
+    if (!$('wiz').classList.contains('show')) return;
+    if (type === 'unlink' && NEEDS_LINK.includes(wz.step)) { wizRender(); return; }
+    const s = STEPS[wz.step];
+    if (s.hook) s.hook(type, line);
+  }
+  function openWizard() { $('wiz').classList.add('show'); wz.step = 0; wz.st = {}; wizRender(); }
+  function closeWizard() {
+    const cur = STEPS[wz.step];
+    clearInterval(wz.timer);
+    if (cur && cur.cleanup) cur.cleanup();
+    $('wiz').classList.remove('show');
+    if (location.hash === '#asistente') history.replaceState(null, '', location.pathname + location.search);
+  }
+  $('btnWizard').addEventListener('click', openWizard);
+
+  // Blancos de práctica: 4 esquinas y los 2 lados
+  let targets = [];
+  function clearTargets() { targets.forEach((t) => t.remove()); targets = []; }
+  function placeTargets() {
+    clearTargets();
+    const spots = [['8px', '8px', null, null], [null, '8px', '8px', null], ['8px', null, null, '8px'], [null, null, '8px', '8px'], ['8px', 'calc(50% - 55px)', null, null], [null, 'calc(50% - 55px)', '8px', null]];
+    const t0 = Date.now();
+    let hits = 0;
+    spots.forEach(([l, t, r, b], k) => {
+      const el = document.createElement('div');
+      el.className = 'target';
+      el.textContent = k + 1;
+      Object.assign(el.style, { left: l || '', top: t || '', right: r || '', bottom: b || '' });
+      el.addEventListener('mouseenter', () => {
+        if (el.classList.contains('hit')) return;
+        el.classList.add('hit');
+        el.textContent = ((Date.now() - t0) / 1000).toFixed(1) + ' s';
+        hits++;
+        wizStatus(hits < spots.length ? `${hits} de ${spots.length}` : `✅ ¡Todos en ${((Date.now() - t0) / 1000).toFixed(0)} s!`);
+      });
+      $('wiz').appendChild(el);
+      targets.push(el);
+    });
+    wizStatus('0 de ' + spots.length);
+  }
+
+  // ================= App instalable (PWA) y uso sin internet =================
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    $('btnInstall').style.display = ''; $('btnInstall2').style.display = '';
+  });
+  window.addEventListener('appinstalled', () => { deferredPrompt = null; $('btnInstall').style.display = 'none'; $('btnInstall2').style.display = 'none'; });
+  async function installApp() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    $('btnInstall').style.display = 'none'; $('btnInstall2').style.display = 'none';
+  }
+  $('btnInstall').addEventListener('click', installApp);
+  $('btnInstall2').addEventListener('click', installApp);
+  if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
+  }
+  if (location.protocol === 'file:') $('lnkDownload').style.display = 'none';
+
+  if (location.hash === '#asistente') openWizard();
 </script>
 </body>
 </html>
