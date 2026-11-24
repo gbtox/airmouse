@@ -3,235 +3,390 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HeadMouse MG24 - Control por Cable</title>
+  <title>HeadMouse MG24 - Panel</title>
   <style>
     :root {
       --primary: #2563eb; --primary-light: #dbeafe; --primary-dark: #1e40af;
-      --success: #10b981; --success-dark: #059669; --danger: #e11d48;
+      --success: #10b981; --success-light: #d1fae5; --success-dark: #065f46;
+      --danger: #e11d48; --danger-light: #fee2e2; --danger-dark: #991b1b;
+      --warn-light: #fef3c7; --warn-dark: #92400e;
       --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
     body { background: var(--bg); color: var(--text); padding: 24px 16px; display: flex; justify-content: center; min-height: 100vh; }
-    .container { max-width: 900px; width: 100%; display: grid; gap: 24px; }
-    .header { background: var(--card); padding: 20px 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; border: 1px solid var(--border); }
-    .title-group h1 { font-size: 24px; font-weight: 800; display: flex; align-items: center; gap: 12px; }
-    .badge { font-size: 13px; padding: 6px 14px; border-radius: 20px; background: #fee2e2; color: #991b1b; font-weight: 700; }
-    .badge.connected { background: #d1fae5; color: #065f46; }
-    .btn-connect { background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
-    .main-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; }
-    @media (max-width: 768px) { .main-grid { grid-template-columns: 1fr; } }
-    .card { background: var(--card); padding: 28px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: 1px solid var(--border); }
-    .card h2 { margin-bottom: 20px; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-    .radar-box { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    canvas#radar { background: #f8fafc; border-radius: 50%; border: 2px solid var(--border); margin: 16px 0; }
-    .radar-legend { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.5; margin-bottom: 20px; }
-    .axis-toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
-    .toggle-btn { padding: 12px 8px; border: 2px solid var(--border); background: #f8fafc; border-radius: 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-    .toggle-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); }
-    .control-group { margin-bottom: 22px; }
-    .control-header { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 8px; font-size: 14px; }
-    .control-value { color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-size: 13px; }
-    input[type="range"] { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 4px; background: var(--border); outline: none; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); cursor: pointer; }
-    .btn-pause { width: 100%; padding: 16px; background: var(--danger); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 12px; display: flex; justify-content: center; align-items: center; gap: 10px; }
-    .btn-recal { width: 100%; padding: 16px; background: var(--success); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .container { max-width: 960px; width: 100%; display: grid; gap: 20px; align-content: start; }
+    .card { background: var(--card); padding: 24px; border-radius: 16px; border: 1px solid var(--border); }
+    .card h2 { margin-bottom: 14px; font-size: 18px; font-weight: 700; }
+    .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .header h1 { font-size: 22px; font-weight: 800; }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .badge { font-size: 12px; padding: 4px 12px; border-radius: 20px; background: var(--danger-light); color: var(--danger-dark); font-weight: 700; }
+    .badge.ok { background: var(--success-light); color: var(--success-dark); }
+    .badge.warn { background: var(--warn-light); color: var(--warn-dark); }
+    button { font: inherit; cursor: pointer; }
+    .btn { padding: 12px 18px; border-radius: 12px; border: none; font-weight: 700; font-size: 15px; color: #fff; background: var(--primary); }
+    .btn.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+    .btn.danger { background: var(--danger); }
+    .btn.success { background: var(--success); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .grid { display: grid; grid-template-columns: 1fr 1.25fr; gap: 20px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+    .stack { display: grid; gap: 10px; }
+    .radar-box { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    canvas#radar { background: var(--bg); border-radius: 50%; border: 2px solid var(--border); max-width: 100%; }
+    .hint { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .control-group { margin-bottom: 18px; }
+    .control-header { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; font-size: 14px; }
+    .val { color: var(--primary-dark); background: var(--primary-light); padding: 2px 8px; border-radius: 6px; font-size: 13px; }
+    input[type="range"] { width: 100%; accent-color: var(--primary); }
+    .cal-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .cal-row:last-of-type { border-bottom: none; }
+    .cal-row .name { font-weight: 700; font-size: 15px; }
+    .cal-row .map { font-size: 13px; color: var(--muted); }
+    .cal-actions { display: flex; gap: 6px; }
+    .cal-actions .btn { padding: 8px 12px; font-size: 13px; }
+    .cal-box { margin-top: 12px; padding: 16px; border-radius: 12px; background: var(--primary-light); color: var(--primary-dark); text-align: center; display: none; }
+    .cal-box.show { display: block; }
+    .cal-box .big { font-size: 26px; font-weight: 800; margin: 6px 0; }
+    .cal-box.ok { background: var(--success-light); color: var(--success-dark); }
+    .cal-box.err { background: var(--danger-light); color: var(--danger-dark); }
+    .bar { height: 8px; border-radius: 4px; background: rgba(0,0,0,.08); overflow: hidden; margin-top: 8px; }
+    .bar > div { height: 100%; width: 0; background: currentColor; transition: width .1s linear; }
+    .raw-row { display: grid; grid-template-columns: 34px 1fr 56px; gap: 8px; align-items: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .raw-track { position: relative; height: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+    .raw-track .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+    .raw-track .fill { position: absolute; top: 1px; bottom: 1px; border-radius: 4px; background: var(--primary); }
+    .log { font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; height: 110px; overflow-y: auto; white-space: pre-wrap; color: var(--muted); }
     .disabled-panel { opacity: 0.35; pointer-events: none; user-select: none; }
+    .notice { padding: 12px 16px; border-radius: 12px; background: var(--warn-light); color: var(--warn-dark); font-size: 14px; display: none; }
+    .notice.show { display: block; }
+    label.chk { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
   </style>
 </head>
 <body>
-
 <div class="container">
-  <div class="header">
-    <div class="title-group">
-      <h1>👓 Panel HeadMouse <span id="statusBadge" class="badge">Desconectado</span></h1>
+
+  <div class="card header">
+    <div>
+      <h1>👓 Panel HeadMouse</h1>
+      <div class="badges">
+        <span id="bUsb" class="badge">USB desconectado</span>
+        <span id="bBle" class="badge">Bluetooth: —</span>
+        <span id="bVer" class="badge warn" style="display:none"></span>
+      </div>
     </div>
-    <button id="btnConnect" class="btn-connect">🔌 Conectar Lentes por USB</button>
+    <button id="btnConnect" class="btn">🔌 Conectar por USB</button>
   </div>
 
-  <div id="mainPanel" class="main-grid disabled-panel">
-    <div class="card radar-box">
-      <h2>🎯 Rastreo de Postura</h2>
-      <canvas id="radar" width="240" height="240"></canvas>
-      <p class="radar-legend">
-        El <strong>punto verde</strong> indica el ángulo de la cabeza.<br>
-        El <strong>área azul</strong> absorbe temblores involuntarios.
-      </p>
-      <button id="btnPause" class="btn-pause" onclick="togglePause()">⏸️ Pausar Movimiento</button>
-      <button id="btnRecal" class="btn-recal">🔄 Resetear Punto Cero</button>
+  <div id="noSerial" class="notice">Este navegador no permite conexión USB serial. Abre el panel en Chrome o Edge de escritorio.</div>
+  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v2) para usar la calibración guiada.</div>
+
+  <div id="mainPanel" class="stack disabled-panel">
+    <div class="grid">
+      <div class="card radar-box">
+        <h2>🎯 Movimiento de la cabeza</h2>
+        <canvas id="radar" width="240" height="240"></canvas>
+        <p class="hint" style="text-align:center">El <b>punto verde</b> es la velocidad del giro de la cabeza.<br>Dentro del <b>círculo azul</b> el cursor no se mueve.</p>
+        <button id="btnPause" class="btn danger" style="width:100%">⏸️ Pausar cursor</button>
+        <button id="btnRecal" class="btn success" style="width:100%">🔄 Resetear punto cero</button>
+        <p class="hint">Resetea con la cabeza quieta: la placa mide su reposo.</p>
+      </div>
+
+      <div class="card">
+        <h2>🧭 Calibración guiada de ejes</h2>
+        <p class="hint">Con los lentes puestos, la persona hace cada movimiento cuando aparezca <b>¡Ahora!</b>. La placa detecta qué eje y qué sentido corresponden, sin importar cómo esté montada.</p>
+
+        <div class="cal-row">
+          <div><div class="name">↔️ Horizontal</div><div id="mapH" class="map">—</div></div>
+          <div class="cal-actions">
+            <button class="btn" onclick="startCal('H')">Calibrar</button>
+            <button class="btn secondary" onclick="send('INV=H')" title="Invertir sentido">⇄</button>
+          </div>
+        </div>
+        <div class="cal-row">
+          <div><div class="name">↕️ Vertical</div><div id="mapV" class="map">—</div></div>
+          <div class="cal-actions">
+            <button class="btn" onclick="startCal('V')">Calibrar</button>
+            <button class="btn secondary" onclick="send('INV=V')" title="Invertir sentido">⇅</button>
+          </div>
+        </div>
+
+        <div id="calBox" class="cal-box">
+          <div id="calTitle"></div>
+          <div id="calBig" class="big"></div>
+          <div id="calSub" class="hint" style="color:inherit"></div>
+          <div class="bar"><div id="calBar"></div></div>
+        </div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>🧭 Alineación Física de los Lentes</h2>
-      <div class="axis-toggles">
-        <button id="btnInvX" class="toggle-btn" onclick="toggleAxis(0)"><span>↔️</span><span>Invertir X</span></button>
-        <button id="btnInvY" class="toggle-btn" onclick="toggleAxis(1)"><span>↕️</span><span>Invertir Y</span></button>
-        <button id="btnSwap" class="toggle-btn" onclick="toggleAxis(2)"><span>🔀</span><span>Permutar X/Y</span></button>
+    <div class="grid">
+      <div class="card">
+        <h2>🎛️ Ajustes de movimiento</h2>
+        <div class="control-group">
+          <div class="control-header"><span>🛡️ Zona muerta (temblor)</span><span id="lDZ" class="val">2.5 °/s</span></div>
+          <input type="range" id="sDZ" min="0" max="10" step="0.5" value="2.5">
+          <p class="hint">Más alto ignora temblores más fuertes, pero exige mover más la cabeza.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>🌊 Suavizado</span><span id="lSM" class="val">60%</span></div>
+          <input type="range" id="sSM" min="0" max="0.9" step="0.05" value="0.6">
+          <p class="hint">Más alto = movimiento más fluido pero con algo de retraso.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>↔️ Velocidad horizontal</span><span id="lGH" class="val">40 px/°</span></div>
+          <input type="range" id="sGH" min="5" max="150" step="5" value="40">
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>↕️ Velocidad vertical</span><span id="lGV" class="val">40 px/°</span></div>
+          <input type="range" id="sGV" min="5" max="150" step="5" value="40">
+          <p class="hint">Píxeles que avanza el cursor por cada grado de giro. Con 40 px/°, girar 24° recorre una pantalla Full HD.</p>
+        </div>
+        <button class="btn secondary" onclick="if(confirm('¿Volver a los valores de fábrica? Se pierde la calibración de ejes.')) send('RST')">Valores de fábrica</button>
       </div>
 
-      <h2>🎛️ Filtros de Calibración Avanzada</h2>
-      <div class="control-group">
-        <div class="control-header"><span>🛡️ Umbral Zona Muerta</span><span id="lblDeadzone" class="control-value">3.0°</span></div>
-        <input type="range" id="deadzone" min="0" max="12" step="0.5" value="3.0">
-      </div>
-      <div class="control-group">
-        <div class="control-header"><span>🌊 Factor de Suavizado</span><span id="lblSmooth" class="control-value">85%</span></div>
-        <input type="range" id="smooth" min="0" max="0.95" step="0.05" value="0.85">
-      </div>
-      <div class="control-group">
-        <div class="control-header"><span>↔️ Ganancia Horizontal (Eje X)</span><span id="lblSensX" class="control-value">1.2x</span></div>
-        <input type="range" id="sensX" min="0.3" max="4.0" step="0.1" value="1.2">
-      </div>
-      <div class="control-group">
-        <div class="control-header"><span>↕️ Ganancia Vertical (Eje Y)</span><span id="lblSensY" class="control-value">1.5x</span></div>
-        <input type="range" id="sensY" min="0.3" max="4.0" step="0.1" value="1.5">
+      <div class="card">
+        <h2>🔬 Diagnóstico</h2>
+        <label class="chk"><input type="checkbox" id="chkRaw"> Ver giroscopio crudo (gx, gy, gz)</label>
+        <div class="stack" id="rawBox" style="margin-bottom:14px">
+          <div class="raw-row"><b>gx</b><div class="raw-track"><div class="mid"></div><div class="fill" id="fx"></div></div><span id="vx">0</span></div>
+          <div class="raw-row"><b>gy</b><div class="raw-track"><div class="mid"></div><div class="fill" id="fy"></div></div><span id="vy">0</span></div>
+          <div class="raw-row"><b>gz</b><div class="raw-track"><div class="mid"></div><div class="fill" id="fz"></div></div><span id="vz">0</span></div>
+        </div>
+        <div class="log" id="log"></div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-  let port;
-  let reader;
-  let inputBuffer = "";
-  let currentDeadzone = 3.0;
-  let headX = 0, headY = 0;
-  let axisState = [0, 0, 0];
-  let isPausedState = 0;
+  const $ = (id) => document.getElementById(id);
+  const AXN = ['gx', 'gy', 'gz'];
+  let port = null, writer = null, keepReading = false;
+  let rateH = 0, rateV = 0, deadzone = 2.5, paused = 0;
+  let gotV2 = false, calTimer = null, calActive = null;
 
-  const canvas = document.getElementById('radar');
-  const ctx = canvas.getContext('2d');
+  if (!('serial' in navigator)) { $('noSerial').classList.add('show'); $('btnConnect').disabled = true; }
 
+  function log(t) {
+    const el = $('log');
+    el.textContent += t + '\n';
+    const lines = el.textContent.split('\n');
+    if (lines.length > 80) el.textContent = lines.slice(-80).join('\n');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  // ---------------- Radar
+  const canvas = $('radar'), ctx = canvas.getContext('2d');
   function drawRadar() {
-    const cx = canvas.width / 2, cy = canvas.height / 2;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
-
-    const radius = Math.max(6, (currentDeadzone / 12) * 100);
-    ctx.fillStyle = "rgba(37, 99, 235, 0.15)"; ctx.strokeStyle = "rgba(37, 99, 235, 0.7)"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-
-    const scale = 100 / 15;
-    const px = Math.max(8, Math.min(canvas.width - 8, cx + (headX * scale)));
-    const py = Math.max(8, Math.min(canvas.height - 8, cy + (headY * scale)));
-    ctx.fillStyle = "#10b981"; ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const w = canvas.width, c = w / 2, scale = (c - 10) / 60; // 60 °/s al borde
+    ctx.clearRect(0, 0, w, w);
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(c, 0); ctx.lineTo(c, w); ctx.moveTo(0, c); ctx.lineTo(w, c); ctx.stroke();
+    ctx.fillStyle = 'rgba(37,99,235,.15)'; ctx.strokeStyle = 'rgba(37,99,235,.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(c, c, Math.max(3, deadzone * scale), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const px = Math.max(8, Math.min(w - 8, c + rateH * scale));
+    const py = Math.max(8, Math.min(w - 8, c + rateV * scale));
+    ctx.fillStyle = paused ? '#94a3b8' : '#10b981';
+    ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill();
   }
   drawRadar();
 
-  document.getElementById('btnConnect').addEventListener('click', async () => {
+  // ---------------- Serial
+  $('btnConnect').addEventListener('click', async () => {
+    if (port) { await disconnect(); return; }
     try {
       port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
-
-      const badge = document.getElementById('statusBadge');
-      badge.innerText = "Conectado por USB"; badge.classList.add('connected');
-      document.getElementById('mainPanel').classList.remove('disabled-panel');
-
-      await sendSerial("GET");
+      writer = port.writable.getWriter();
+      setBadge('bUsb', 'USB conectado', 'ok');
+      $('btnConnect').textContent = '⏏️ Desconectar';
+      $('mainPanel').classList.remove('disabled-panel');
+      keepReading = true;
       readLoop();
+      gotV2 = false;
+      await send('GET');
+      setTimeout(() => { if (port && !gotV2) $('oldFw').classList.add('show'); }, 2500);
     } catch (err) {
-      alert("Error al abrir puerto USB: " + err.message);
+      port = null;
+      if (err.name !== 'NotFoundError') alert('No se pudo abrir el puerto USB: ' + err.message);
     }
   });
 
+  navigator.serial && navigator.serial.addEventListener('disconnect', (e) => { if (e.target === port) disconnect(); });
+
+  async function disconnect() {
+    keepReading = false;
+    try { if (writer) { writer.releaseLock(); } } catch (e) {}
+    try { if (port) await port.close(); } catch (e) {}
+    port = null; writer = null;
+    setBadge('bUsb', 'USB desconectado', '');
+    setBadge('bBle', 'Bluetooth: —', '');
+    $('btnConnect').textContent = '🔌 Conectar por USB';
+    $('mainPanel').classList.add('disabled-panel');
+  }
+
   async function readLoop() {
     const decoder = new TextDecoder();
-    while (port.readable) {
-      reader = port.readable.getReader();
+    let buf = '';
+    while (port && port.readable && keepReading) {
+      const reader = port.readable.getReader();
       try {
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          inputBuffer += decoder.decode(value);
-          let lines = inputBuffer.split("\n");
-          inputBuffer = lines.pop();
-          for (let line of lines) { parseSerialLine(line.trim()); }
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+          for (const l of lines) parseLine(l.trim());
         }
-      } catch (err) { console.error(err); } finally { reader.releaseLock(); }
+      } catch (e) { console.warn(e); }
+      finally { reader.releaseLock(); }
     }
   }
 
-  function parseSerialLine(line) {
-    if (line.startsWith("R:")) {
-      let parts = line.substring(2).split(",");
-      headX = parseFloat(parts[0]); headY = parseFloat(parts[1]);
+  // Cola de escritura: evita choques cuando los sliders envían muy seguido
+  let sendChain = Promise.resolve();
+  function send(cmd) {
+    if (!writer) return Promise.resolve();
+    sendChain = sendChain.then(() => writer.write(new TextEncoder().encode(cmd + '\n'))).catch((e) => log('ERR envío: ' + e.message));
+    return sendChain;
+  }
+
+  function setBadge(id, text, cls) { const b = $(id); b.textContent = text; b.className = 'badge' + (cls ? ' ' + cls : ''); }
+
+  // ---------------- Parser
+  function parseLine(line) {
+    if (!line) return;
+    if (line.startsWith('R:')) {
+      const p = line.slice(2).split(',');
+      rateH = parseFloat(p[0]) || 0; rateV = parseFloat(p[1]) || 0;
       drawRadar();
-    } else if (line.startsWith("CFG:")) {
-      let parts = line.substring(4).split(",");
-      currentDeadzone = parseFloat(parts[0]);
-      let smVal = parseFloat(parts[1]);
-      let sxVal = parseFloat(parts[2]);
-      let syVal = parseFloat(parts[3]);
-      axisState = [parseInt(parts[4]), parseInt(parts[5]), parseInt(parts[6])];
-      isPausedState = parseInt(parts[7]);
-
-      document.getElementById('deadzone').value = currentDeadzone;
-      document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
-      document.getElementById('smooth').value = smVal;
-      document.getElementById('lblSmooth').innerText = Math.round(smVal * 100) + "%";
-      document.getElementById('sensX').value = sxVal;
-      document.getElementById('lblSensX').innerText = sxVal + "x";
-      document.getElementById('sensY').value = syVal;
-      document.getElementById('lblSensY').innerText = syVal + "x";
-
-      document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
-      document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
-      document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
-      updatePauseButtonVisual(); drawRadar();
+      return;
+    }
+    if (line.startsWith('G:')) {
+      const p = line.slice(2).split(',').map(parseFloat);
+      ['x', 'y', 'z'].forEach((a, i) => setRaw(a, p[i] || 0));
+      return;
+    }
+    log(line);
+    if (line.startsWith('VER:')) {
+      gotV2 = true; $('oldFw').classList.remove('show');
+      setBadge('bVer', 'Firmware ' + line.slice(4), 'ok'); $('bVer').style.display = '';
+    } else if (line.startsWith('CFG:')) {
+      applyConfig(line.slice(4).split(','));
+    } else if (line.startsWith('ST:BLE,')) {
+      const s = parseInt(line.slice(7));
+      setBadge('bBle', ['Bluetooth: esperando PC', 'Bluetooth: conectando…', 'Bluetooth: conectado'][s] || 'Bluetooth: ?', s === 2 ? 'ok' : 'warn');
+    } else if (line.startsWith('CAL:')) {
+      onCalMessage(line);
+    } else if (line.startsWith('OFF:') && line.includes('inestable')) {
+      log('⚠️ La placa se movió al medir el punto cero. Repite con la cabeza quieta.');
     }
   }
 
-  async function sendSerial(cmd) {
-    if (!port || !port.writable) return;
-    const encoder = new TextEncoder();
-    const writer = port.writable.getWriter();
-    await writer.write(encoder.encode(cmd + "\n"));
-    writer.releaseLock();
+  function applyConfig(p) {
+    if (p.length < 10) return;
+    deadzone = parseFloat(p[0]);
+    setSlider('DZ', deadzone, deadzone + ' °/s');
+    setSlider('SM', parseFloat(p[1]), Math.round(parseFloat(p[1]) * 100) + '%');
+    setSlider('GH', parseFloat(p[2]), p[2] + ' px/°');
+    setSlider('GV', parseFloat(p[3]), p[3] + ' px/°');
+    const cal = parseInt(p[9]);
+    $('mapH').textContent = 'Eje ' + AXN[p[4]] + ' (' + (p[5] === '1' ? '+' : '−') + ')' + (cal & 1 ? ' · calibrado ✓' : ' · sin calibrar');
+    $('mapV').textContent = 'Eje ' + AXN[p[6]] + ' (' + (p[7] === '1' ? '+' : '−') + ')' + (cal & 2 ? ' · calibrado ✓' : ' · sin calibrar');
+    paused = parseInt(p[8]); updatePause(); drawRadar();
   }
 
-  async function togglePause() {
-    isPausedState = isPausedState === 0 ? 1 : 0;
-    updatePauseButtonVisual();
-    await sendSerial("PA=" + isPausedState);
+  function setSlider(k, v, label) {
+    if (document.activeElement !== $('s' + k)) $('s' + k).value = v;
+    $('l' + k).textContent = label;
   }
 
-  function updatePauseButtonVisual() {
-    const btn = document.getElementById('btnPause');
-    if (isPausedState === 1) {
-      btn.innerText = "▶️ Reanudar Movimiento"; btn.style.background = "var(--primary)";
+  function setRaw(a, v) {
+    const pct = Math.max(-50, Math.min(50, v / 200 * 50));
+    const f = $('f' + a);
+    f.style.left = (pct < 0 ? 50 + pct : 50) + '%';
+    f.style.width = Math.abs(pct) + '%';
+    $('v' + a).textContent = v.toFixed(0);
+  }
+
+  // ---------------- Controles
+  function throttled(fn, ms) {
+    let t = 0, pending = null;
+    return (v) => {
+      pending = v;
+      const now = Date.now();
+      if (now - t >= ms) { t = now; fn(pending); pending = null; }
+      else setTimeout(() => { if (pending !== null) { t = Date.now(); fn(pending); pending = null; } }, ms - (now - t));
+    };
+  }
+  function bindSlider(k, cmd, fmt) {
+    const s = $('s' + k);
+    const tx = throttled((v) => send(cmd + '=' + v), 120);
+    s.addEventListener('input', () => { $('l' + k).textContent = fmt(s.value); if (k === 'DZ') { deadzone = parseFloat(s.value); drawRadar(); } tx(s.value); });
+    s.addEventListener('change', () => send(cmd + '=' + s.value));
+  }
+  bindSlider('DZ', 'DZ', (v) => v + ' °/s');
+  bindSlider('SM', 'SM', (v) => Math.round(v * 100) + '%');
+  bindSlider('GH', 'GH', (v) => v + ' px/°');
+  bindSlider('GV', 'GV', (v) => v + ' px/°');
+
+  $('btnPause').addEventListener('click', () => { paused = paused ? 0 : 1; updatePause(); send('PA=' + paused); });
+  function updatePause() {
+    const b = $('btnPause');
+    b.textContent = paused ? '▶️ Reanudar cursor' : '⏸️ Pausar cursor';
+    b.className = 'btn ' + (paused ? '' : 'danger');
+    b.style.width = '100%';
+  }
+  $('btnRecal').addEventListener('click', () => send('RC'));
+  $('chkRaw').addEventListener('change', (e) => send('RAW=' + (e.target.checked ? 1 : 0)));
+
+  // ---------------- Calibración guiada
+  const CAL_TXT = {
+    H: { title: 'Calibrando horizontal', action: 'Gira la cabeza a la DERECHA ➡️', sub: '…y vuelve al centro. Puedes repetirlo 2 veces.' },
+    V: { title: 'Calibrando vertical', action: 'Mira hacia ABAJO ⬇️', sub: '…y vuelve al centro. Puedes repetirlo 2 veces.' }
+  };
+  function calBox(cls, title, big, sub, pct) {
+    const b = $('calBox');
+    b.className = 'cal-box show' + (cls ? ' ' + cls : '');
+    $('calTitle').textContent = title; $('calBig').textContent = big; $('calSub').textContent = sub;
+    $('calBar').style.width = (pct || 0) + '%';
+  }
+  function startCal(t) {
+    if (calActive) return;
+    calActive = t;
+    const T = CAL_TXT[t];
+    let n = 3;
+    calBox('', T.title, 'Prepárate… ' + n, 'Quédate quieto con la mirada al frente.', 0);
+    calTimer = setInterval(() => {
+      n--;
+      if (n > 0) { calBox('', T.title, 'Prepárate… ' + n, 'Quédate quieto con la mirada al frente.', 0); return; }
+      clearInterval(calTimer);
+      send('CAL=' + t);
+      const t0 = Date.now();
+      calBox('', T.title, '¡Ahora! ' + T.action, T.sub, 0);
+      calTimer = setInterval(() => {
+        const pct = Math.min(100, (Date.now() - t0) / 3000 * 100);
+        $('calBar').style.width = pct + '%';
+        if (pct >= 100) clearInterval(calTimer);
+      }, 50);
+      setTimeout(() => { if (calActive === t) { calActive = null; calBox('err', T.title, 'Sin respuesta de la placa', '¿Está cargado el firmware v2?', 0); } }, 6000);
+    }, 1000);
+  }
+  function onCalMessage(line) {
+    const m = line.match(/^CAL:([HV]):(GO|OK|ERR),?(.*)$/);
+    if (!m || m[2] === 'GO') return;
+    const t = m[1], T = CAL_TXT[t];
+    clearInterval(calTimer); calActive = null;
+    if (m[2] === 'OK') {
+      const [ax, sg] = m[3].split(',');
+      calBox('ok', T.title, 'Listo ✓', 'Detectado: eje ' + AXN[ax] + ' (' + (sg === '1' ? '+' : '−') + '). ' + (t === 'H' ? 'Ahora calibra el vertical.' : 'Prueba mover el cursor.'), 100);
     } else {
-      btn.innerText = "⏸️ Pausar Movimiento"; btn.style.background = "var(--danger)";
+      const why = { 'poco movimiento': 'El movimiento fue muy pequeño. Gira un poco más.', 'movimiento mezclado': 'Se mezclaron giros. Intenta un movimiento más puro.', 'mismo eje que horizontal': 'Detectó el mismo eje que el horizontal. Repite ambos.', 'mismo eje que vertical': 'Detectó el mismo eje que el vertical. Repite ambos.' }[m[3]] || m[3];
+      calBox('err', T.title, 'No se pudo calibrar', why, 0);
     }
   }
-
-  async function toggleAxis(index) {
-    axisState[index] = axisState[index] === 0 ? 1 : 0;
-    document.getElementById('btnInvX').classList.toggle('active', axisState[0] === 1);
-    document.getElementById('btnInvY').classList.toggle('active', axisState[1] === 1);
-    document.getElementById('btnSwap').classList.toggle('active', axisState[2] === 1);
-    await sendSerial("AX=" + axisState[0] + "," + axisState[1] + "," + axisState[2]);
-  }
-
-  document.getElementById('deadzone').addEventListener('input', (e) => {
-    currentDeadzone = parseFloat(e.target.value);
-    document.getElementById('lblDeadzone').innerText = currentDeadzone + "°";
-    drawRadar(); sendSerial("DZ=" + currentDeadzone);
-  });
-  document.getElementById('smooth').addEventListener('input', (e) => {
-    document.getElementById('lblSmooth').innerText = Math.round(e.target.value * 100) + "%";
-    sendSerial("SM=" + e.target.value);
-  });
-  document.getElementById('sensX').addEventListener('input', (e) => {
-    document.getElementById('lblSensX').innerText = e.target.value + "x";
-    sendSerial("SX=" + e.target.value);
-  });
-  document.getElementById('sensY').addEventListener('input', (e) => {
-    document.getElementById('lblSensY').innerText = e.target.value + "x";
-    sendSerial("SY=" + e.target.value);
-  });
-  document.getElementById('btnRecal').addEventListener('click', async () => {
-    await sendSerial("RC");
-  });
 </script>
 </body>
 </html>
