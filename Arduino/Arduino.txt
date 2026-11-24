@@ -1,0 +1,348 @@
+#include <LSM6DS3.h>
+#include "Wire.h"
+#include <EEPROM.h>
+
+#define DEVICE_NAME "HeadMouse-MG24"
+const uint32_t CONFIG_MAGIC = 0x484D3234; // Identificador "HM24"
+
+struct ConfigData {
+  uint32_t magic;
+  float deadzone;
+  float smoothing;
+  float sensX;
+  float sensY;
+  int8_t invertX;
+  int8_t invertY;
+  uint8_t swapAxes;
+};
+
+ConfigData cfg;
+
+// Variables de filtrado y muestreo estricto
+int sideMultiplier = 1;
+float gyroOffsetX = 0.0f, gyroOffsetY = 0.0f, gyroOffsetZ = 0.0f;
+float filteredX = 0.0f, filteredY = 0.0f;
+unsigned long lastLoopTime = 0;
+unsigned long lastRadarUpdate = 0;
+uint8_t isPaused = 0; 
+
+// Temporizador para escritura segura en Flash
+bool pendingSave = false;
+unsigned long lastChangeTime = 0;
+
+struct mouse_data {
+  int8_t delta_x;
+  int8_t delta_y;
+  uint8_t buttons;
+};
+
+static mouse_data report;
+static uint8_t report_array[3] = { 0x00, 0x00, 0x00 };
+
+static uint8_t connection_handle = SL_BT_INVALID_CONNECTION_HANDLE;
+static uint32_t bonding_handle = SL_BT_INVALID_BONDING_HANDLE;
+static uint16_t hid_report;
+
+static bd_addr ble_address = { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
+static sl_status_t sc = SL_STATUS_OK;
+
+static void ble_initialize_gatt_db();
+static void ble_start_advertising();
+void sendCurrentConfig();
+void parseSerialCommands();
+
+LSM6DS3 myIMU(I2C_MODE, 0x6A);
+
+void blinkLED(int times, int duration = 150) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(duration);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(duration);
+  }
+}
+
+void loadConfigFromFlash() {
+  EEPROM.begin(); 
+  EEPROM.get(0, cfg);
+
+  if (cfg.magic != CONFIG_MAGIC) {
+    cfg.magic = CONFIG_MAGIC;
+    cfg.deadzone = 3.0f;     // Un valor inicial ligeramente más alto ayuda con el temblor
+    cfg.smoothing = 0.85f;    // Mayor amortiguación por defecto para estabilidad
+    cfg.sensX = 1.2f;
+    cfg.sensY = 1.5f;
+    cfg.invertX = 1;
+    cfg.invertY = 1;
+    cfg.swapAxes = 0;
+    EEPROM.put(0, cfg);
+  }
+}
+
+void saveConfigToFlash() {
+  EEPROM.put(0, cfg); 
+  blinkLED(1, 60); // Destello rápido: datos guardados con éxito en la Flash
+}
+
+void calibrateHeadMouse() {
+  delay(1500); 
+  float sumAccZ = 0.0f, sumGX = 0.0f, sumGY = 0.0f, sumGZ = 0.0f;
+  int samples = 50;
+
+  for (int i = 0; i < samples; i++) {
+    sumAccZ += myIMU.readFloatAccelZ();
+    sumGX += myIMU.readFloatGyroX();
+    sumGY += myIMU.readFloatGyroY();
+    sumGZ += myIMU.readFloatGyroZ();
+    delay(10);
+  }
+
+  sideMultiplier = ((sumAccZ / samples) < 0.0f) ? -1 : 1;
+  blinkLED(sideMultiplier == 1 ? 1 : 2);
+
+  gyroOffsetX = sumGX / samples;
+  gyroOffsetY = sumGY / samples;
+  gyroOffsetZ = sumGZ / samples;
+}
+
+void setup() {
+  memset(&report, 0, sizeof(report));
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  loadConfigFromFlash();
+
+  pinMode(PD5, OUTPUT);
+  digitalWrite(PD5, HIGH);
+  delay(300);
+
+  Serial.begin(115200);
+  myIMU.begin();
+  calibrateHeadMouse();
+  lastLoopTime = millis();
+}
+
+void loop() {
+  parseSerialCommands();
+
+  // Gestión de guardado diferido
+  if (pendingSave && (millis() - lastChangeTime > 2000)) {
+    saveConfigToFlash();
+    pendingSave = false;
+  }
+
+  // Bucle de tiempo estricto no bloqueante para eliminar el temblor (Frecuencia: 66Hz)
+  if (millis() - lastLoopTime >= 15) {
+    lastLoopTime = millis();
+
+    float gx = myIMU.readFloatGyroX() - gyroOffsetX;
+    float gy = myIMU.readFloatGyroY() - gyroOffsetY;
+    float gz = myIMU.readFloatGyroZ() - gyroOffsetZ;
+
+    float rawH = (cfg.swapAxes == 0) ? gz : gy;
+    float rawV = (cfg.swapAxes == 0) ? gx : gz;
+
+    // Filtro de zona muerta (Deadzone)
+    float cleanH = (fabs(rawH) < cfg.deadzone) ? 0.0f : rawH;
+    float cleanV = (fabs(rawV) < cfg.deadzone) ? 0.0f : rawV;
+
+    // Filtro Exponencial (EMA) amortiguador de espasmos
+    filteredX = (cfg.smoothing * filteredX) + ((1.0f - cfg.smoothing) * cleanH);
+    filteredY = (cfg.smoothing * filteredY) + ((1.0f - cfg.smoothing) * cleanV);
+
+    // Enviar telemetría al radar de la interfaz web
+    if (millis() - lastRadarUpdate > 50) {
+      Serial.print("R:");
+      Serial.print(rawH * (float)sideMultiplier * (float)cfg.invertX, 1);
+      Serial.print(",");
+      Serial.println(rawV * (float)sideMultiplier * (float)cfg.invertY, 1);
+      lastRadarUpdate = millis();
+    }
+
+    // Procesar envío de coordenadas HID
+    if (isPaused == 1) {
+      // Si está en pausa, forzamos de forma activa reportes en 0 para clavar el cursor
+      report.delta_x = 0;
+      report.delta_y = 0;
+      report.buttons = 0;
+      if (connection_handle != SL_BT_INVALID_CONNECTION_HANDLE && bonding_handle != SL_BT_INVALID_BONDING_HANDLE) {
+        memcpy(report_array, &report, sizeof(report));
+        sl_bt_gatt_server_notify_all(hid_report, sizeof(report_array), report_array);
+      }
+    } else {
+      // Funcionamiento normal del AirMouse inalámbrico
+      int32_t moveX = (int32_t)(filteredX * cfg.sensX * (float)sideMultiplier * (float)cfg.invertX);
+      int32_t moveY = (int32_t)(filteredY * cfg.sensY * (float)sideMultiplier * (float)cfg.invertY);
+
+      report.delta_x = (int8_t)constrain(moveX, -127, 127);
+      report.delta_y = (int8_t)constrain(moveY, -127, 127);
+      report.buttons = 0;
+
+      if (connection_handle != SL_BT_INVALID_CONNECTION_HANDLE &&
+          bonding_handle != SL_BT_INVALID_BONDING_HANDLE &&
+          (report.delta_x != 0 || report.delta_y != 0)) {
+        memcpy(report_array, &report, sizeof(report));
+        sl_bt_gatt_server_notify_all(hid_report, sizeof(report_array), report_array);
+      }
+    }
+  }
+}
+
+void parseSerialCommands() {
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd == "GET") {
+      sendCurrentConfig();
+    } else if (cmd.startsWith("DZ=")) {
+      cfg.deadzone = cmd.substring(3).toFloat();
+      pendingSave = true; lastChangeTime = millis();
+    } else if (cmd.startsWith("SM=")) {
+      cfg.smoothing = cmd.substring(3).toFloat();
+      pendingSave = true; lastChangeTime = millis();
+    } else if (cmd.startsWith("SX=")) {
+      cfg.sensX = cmd.substring(3).toFloat();
+      pendingSave = true; lastChangeTime = millis();
+    } else if (cmd.startsWith("SY=")) {
+      cfg.sensY = cmd.substring(3).toFloat();
+      pendingSave = true; lastChangeTime = millis();
+    } else if (cmd == "RC") {
+      calibrateHeadMouse();
+    } else if (cmd.startsWith("PA=")) {
+      isPaused = cmd.substring(3).toInt();
+    } else if (cmd.startsWith("AX=")) {
+      int firstComma = cmd.indexOf(',');
+      int secondComma = cmd.indexOf(',', firstComma + 1);
+      cfg.invertX = cmd.substring(3, firstComma).toInt() == 1 ? -1 : 1;
+      cfg.invertY = cmd.substring(firstComma + 1, secondComma).toInt() == 1 ? -1 : 1;
+      cfg.swapAxes = cmd.substring(secondComma + 1).toInt();
+      pendingSave = true; lastChangeTime = millis();
+    }
+  }
+}
+
+void sendCurrentConfig() {
+  Serial.print("CFG:");
+  Serial.print(cfg.deadzone, 1); Serial.print(",");
+  Serial.print(cfg.smoothing, 2); Serial.print(",");
+  Serial.print(cfg.sensX, 1); Serial.print(",");
+  Serial.print(cfg.sensY, 1); Serial.print(",");
+  Serial.print(cfg.invertX == -1 ? 1 : 0); Serial.print(",");
+  Serial.print(cfg.invertY == -1 ? 1 : 0); Serial.print(",");
+  Serial.print(cfg.swapAxes); Serial.print(",");
+  Serial.println(isPaused);
+}
+
+void sl_bt_on_event(sl_bt_msg_t* evt) {
+  uint8_t ble_address_type;
+  switch (SL_BT_MSG_ID(evt->header)) {
+    case sl_bt_evt_system_boot_id:
+      sc = sl_bt_system_get_identity_address(&ble_address, &ble_address_type);
+      app_assert_status(sc);
+      ble_initialize_gatt_db();
+      sc = sl_bt_sm_configure(0, sl_bt_sm_io_capability_noinputnooutput);
+      app_assert_status(sc);
+      sc = sl_bt_sm_set_bondable_mode(1);
+      app_assert_status(sc);
+      ble_start_advertising();
+      break;
+    case sl_bt_evt_connection_opened_id:
+      connection_handle = evt->data.evt_connection_opened.connection;
+      bonding_handle = evt->data.evt_connection_opened.bonding;
+      sc = sl_bt_sm_increase_security(connection_handle);
+      app_assert_status(sc);
+      break;
+    case sl_bt_evt_sm_bonded_id:
+      bonding_handle = evt->data.evt_sm_bonded.bonding;
+      connection_handle = evt->data.evt_sm_bonded.connection;
+      break;
+    case sl_bt_evt_connection_closed_id:
+      connection_handle = SL_BT_INVALID_CONNECTION_HANDLE;
+      bonding_handle = SL_BT_INVALID_BONDING_HANDLE;
+      sc = sl_bt_sm_delete_bondings();
+      app_assert_status(sc);
+      ble_start_advertising();
+      break;
+    case sl_bt_evt_sm_bonding_failed_id:
+      sc = sl_bt_sm_delete_bondings();
+      app_assert_status(sc);
+      break;
+    default:
+      break;
+  }
+}
+
+static void ble_start_advertising() {
+  static uint8_t advertising_set_handle = 0xff;
+  static bool init = true;
+  if (init) {
+    sc = sl_bt_advertiser_create_set(&advertising_set_handle);
+    app_assert_status(sc);
+    sc = sl_bt_advertiser_set_timing(advertising_set_handle, 160, 160, 0, 0);
+    app_assert_status(sc);
+    init = false;
+  }
+  sc = sl_bt_legacy_advertiser_generate_data(advertising_set_handle, sl_bt_advertiser_general_discoverable);
+  app_assert_status(sc);
+  sc = sl_bt_legacy_advertiser_start(advertising_set_handle, sl_bt_advertiser_connectable_scannable);
+  app_assert_status(sc);
+}
+
+static void ble_initialize_gatt_db() {
+  uint16_t gattdb_session_id, service, characteristic, descriptor;
+  sc = sl_bt_gattdb_new_session(&gattdb_session_id);
+  app_assert_status(sc);
+
+  uint8_t generic_access_uuid[] = { 0x00, 0x18 };
+  sc = sl_bt_gattdb_add_service(gattdb_session_id, sl_bt_gattdb_primary_service, SL_BT_GATTDB_ADVERTISED_SERVICE, 2, generic_access_uuid, &service);
+  app_assert_status(sc);
+  sl_bt_uuid_16_t dev_name_uuid = { .data = { 0x00, 0x2A } };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(gattdb_session_id, service, SL_BT_GATTDB_CHARACTERISTIC_READ, 0, 0, dev_name_uuid, sl_bt_gattdb_fixed_length_value, strlen(DEVICE_NAME), strlen(DEVICE_NAME), (uint8_t*)DEVICE_NAME, &characteristic);
+  app_assert_status(sc);
+  sl_bt_uuid_16_t app_uuid = { .data = { 0x01, 0x2A } };
+  const uint8_t app_val[] = { 0xC2, 0x03 };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(gattdb_session_id, service, SL_BT_GATTDB_CHARACTERISTIC_READ, 0, 0, app_uuid, sl_bt_gattdb_fixed_length_value, 2, 2, app_val, &characteristic);
+  app_assert_status(sc);
+  sc = sl_bt_gattdb_start_service(gattdb_session_id, service);
+  app_assert_status(sc);
+
+  uint8_t hid_uuid[] = { 0x12, 0x18 };
+  sc = sl_bt_gattdb_add_service(gattdb_session_id, sl_bt_gattdb_primary_service, SL_BT_GATTDB_ADVERTISED_SERVICE, 2, hid_uuid, &service);
+  app_assert_status(sc);
+  sl_bt_uuid_16_t proto_uuid = { .data = { 0x4E, 0x2A } };
+  const uint8_t proto_val[] = { 1 };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(gattdb_session_id, service, SL_BT_GATTDB_CHARACTERISTIC_READ | SL_BT_GATTDB_CHARACTERISTIC_WRITE_NO_RESPONSE, 0, 0, proto_uuid, sl_bt_gattdb_fixed_length_value, 1, 1, proto_val, &characteristic);
+  app_assert_status(sc);
+
+  const sl_bt_uuid_16_t rep_uuid = { .data = { 0x4D, 0x2A } };
+  const uint8_t rep_val[] = { 0, 0, 0 };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(gattdb_session_id, service, SL_BT_GATTDB_CHARACTERISTIC_READ | SL_BT_GATTDB_CHARACTERISTIC_NOTIFY, 0, 0, rep_uuid, sl_bt_gattdb_fixed_length_value, 3, 3, rep_val, &hid_report);
+  app_assert_status(sc);
+
+  const sl_bt_uuid_16_t ref_uuid = { .data = { 0x08, 0x29 } };
+  const uint8_t ref_val[] = { 0x00, 0x01 };
+  sc = sl_bt_gattdb_add_uuid16_descriptor(gattdb_session_id, hid_report, SL_BT_GATTDB_DESCRIPTOR_READ, SL_BT_GATTDB_ENCRYPTED_READ, ref_uuid, sl_bt_gattdb_fixed_length_value, 2, 2, ref_val, &descriptor);
+  app_assert_status(sc);
+
+  const sl_bt_uuid_16_t map_uuid = { .data = { 0x4B, 0x2A } };
+  const uint8_t map_val[] = {
+    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x09, 0x01, 0xA1, 0x00,
+    0x09, 0x30, 0x09, 0x31, 0x15, 0x80, 0x25, 0x7F, 0x95, 0x02,
+    0x75, 0x08, 0x81, 0x06, 0x05, 0x09, 0x19, 0x01, 0x29, 0x03,
+    0x15, 0x00, 0x25, 0x01, 0x95, 0x03, 0x75, 0x01, 0x81, 0x02,
+    0x95, 0x01, 0x75, 0x05, 0x81, 0x03, 0xC0, 0xC0
+  };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(gattdb_session_id, service, SL_BT_GATTDB_CHARACTERISTIC_READ, SL_BT_GATTDB_ENCRYPTED_READ, 0, map_uuid, sl_bt_gattdb_fixed_length_value, sizeof(map_val), sizeof(map_val), map_val, &characteristic);
+  app_assert_status(sc);
+
+  const sl_bt_uuid_16_t info_uuid = { .data = { 0x4A, 0x2A } };
+  const uint8_t info_val[] = { 0x01, 0x11, 0x00, 0x02 };
+  sc = sl_bt_gattdb_add_uuid16_characteristic(gattdb_session_id, service, SL_BT_GATTDB_CHARACTERISTIC_READ, 0, 0, info_uuid, sl_bt_gattdb_fixed_length_value, 4, 4, info_val, &characteristic);
+  app_assert_status(sc);
+
+  sc = sl_bt_gattdb_start_service(gattdb_session_id, service);
+  app_assert_status(sc);
+  sc = sl_bt_gattdb_commit(gattdb_session_id);
+  app_assert_status(sc);
+}

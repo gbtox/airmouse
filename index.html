@@ -60,6 +60,14 @@
     .disabled-panel { opacity: 0.35; pointer-events: none; user-select: none; }
     .notice { padding: 12px 16px; border-radius: 12px; background: var(--warn-light); color: var(--warn-dark); font-size: 14px; display: none; }
     .notice.show { display: block; }
+    canvas.curve { width: 100%; height: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+    .tip { font-size: 13px; line-height: 1.5; background: var(--success-light); color: var(--success-dark); padding: 10px 12px; border-radius: 10px; }
+    .sleep-state { text-align: center; font-weight: 800; padding: 10px; border-radius: 10px; margin-bottom: 16px; background: var(--success-light); color: var(--success-dark); }
+    .sleep-state.on { background: #e0e7ff; color: #3730a3; }
+    .peak { display: grid; grid-template-columns: 1fr 100px; gap: 8px; align-items: center; font-size: 12px; margin-top: 8px; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .peak-track { position: relative; height: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    #peakFill { height: 100%; width: 0; background: #f59e0b; }
+    .peak-track .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); }
     label.chk { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
   </style>
 </head>
@@ -79,7 +87,7 @@
   </div>
 
   <div id="noSerial" class="notice">Este navegador no permite conexión USB serial. Abre el panel en Chrome o Edge de escritorio.</div>
-  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v2) para usar la calibración guiada.</div>
+  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v2.1) para usar la calibración guiada, la aceleración y el reposo.</div>
 
   <div id="mainPanel" class="stack disabled-panel">
     <div class="grid">
@@ -117,6 +125,47 @@
           <div id="calSub" class="hint" style="color:inherit"></div>
           <div class="bar"><div id="calBar"></div></div>
         </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>🚀 Aceleración</h2>
+        <canvas id="accCurve" width="400" height="150" class="curve"></canvas>
+        <p class="hint" style="margin:6px 0 14px">Multiplicador de velocidad según qué tan rápido gira la cabeza. El punto verde es el giro actual. <b id="lMult">×1.0</b></p>
+        <div class="control-group">
+          <div class="control-header"><span>💨 Fuerza</span><span id="lAC" class="val">1.0</span></div>
+          <input type="range" id="sAC" min="0" max="3" step="0.1" value="1">
+          <p class="hint">0 = sin aceleración. Más alto = los giros rápidos llevan el cursor más lejos.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>🎯 Empieza a acelerar desde</span><span id="lAT" class="val">40 °/s</span></div>
+          <input type="range" id="sAT" min="10" max="120" step="5" value="40">
+          <p class="hint">Bajo esta velocidad el cursor es preciso; sobre ella, acelera.</p>
+        </div>
+        <div class="tip">💡 <b>Para llegar a un borde difícil:</b> vuelve <i>lento</i> hacia el lado contrario (el cursor casi no se mueve) y luego gira <i>rápido</i> hacia el borde. Repite si hace falta.</div>
+      </div>
+
+      <div class="card">
+        <h2>😴 Reposo automático</h2>
+        <div id="sleepState" class="sleep-state">Activo</div>
+        <div class="control-group">
+          <div class="control-header"><span>⏱️ Entrar en reposo tras</span><span id="lIT" class="val">30 s</span></div>
+          <input type="range" id="sIT" min="0" max="180" step="5" value="30">
+          <p class="hint">Si el cursor no se mueve en este tiempo, se congela. 0 = nunca.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>⚡ Giro brusco para despertar</span><span id="lWT" class="val">120 °/s</span></div>
+          <input type="range" id="sWT" min="40" max="300" step="10" value="120">
+          <div class="peak"><div class="peak-track"><div id="peakFill"></div><div id="peakMark" class="mark"></div></div><span id="lPeak">pico 0 °/s</span></div>
+          <p class="hint">La barra muestra el giro más rápido de los últimos 3 s; la línea roja es el umbral. Ponlo por sobre los movimientos involuntarios.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>🔁 Giros bruscos necesarios</span><span id="lWN" class="val">2</span></div>
+          <input type="range" id="sWN" min="1" max="4" step="1" value="2">
+          <p class="hint">Dentro de 1,5 s. Con 2, basta un "no" rápido (izquierda-derecha).</p>
+        </div>
+        <button id="btnSleep" class="btn secondary" style="width:100%">😴 Poner en reposo ahora</button>
       </div>
     </div>
 
@@ -165,6 +214,7 @@
   let port = null, writer = null, keepReading = false;
   let rateH = 0, rateV = 0, deadzone = 2.5, paused = 0;
   let gotV2 = false, calTimer = null, calActive = null;
+  let mult = 1, accel = 1, accelThr = 40, wakeThr = 120, sleeping = 0;
 
   if (!('serial' in navigator)) { $('noSerial').classList.add('show'); $('btnConnect').disabled = true; }
 
@@ -187,7 +237,7 @@
     ctx.beginPath(); ctx.arc(c, c, Math.max(3, deadzone * scale), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     const px = Math.max(8, Math.min(w - 8, c + rateH * scale));
     const py = Math.max(8, Math.min(w - 8, c + rateV * scale));
-    ctx.fillStyle = paused ? '#94a3b8' : '#10b981';
+    ctx.fillStyle = (paused || sleeping) ? '#94a3b8' : '#10b981';
     ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill();
   }
   drawRadar();
@@ -261,9 +311,12 @@
     if (line.startsWith('R:')) {
       const p = line.slice(2).split(',');
       rateH = parseFloat(p[0]) || 0; rateV = parseFloat(p[1]) || 0;
-      drawRadar();
+      mult = parseFloat(p[2]) || 1;
+      trackPeak(Math.max(Math.abs(rateH), Math.abs(rateV)));
+      drawRadar(); drawCurve();
       return;
     }
+    if (line.startsWith('ST:SLEEP,')) { log(line); setSleepUI(parseInt(line.slice(9))); return; }
     if (line.startsWith('G:')) {
       const p = line.slice(2).split(',').map(parseFloat);
       ['x', 'y', 'z'].forEach((a, i) => setRaw(a, p[i] || 0));
@@ -295,8 +348,63 @@
     const cal = parseInt(p[9]);
     $('mapH').textContent = 'Eje ' + AXN[p[4]] + ' (' + (p[5] === '1' ? '+' : '−') + ')' + (cal & 1 ? ' · calibrado ✓' : ' · sin calibrar');
     $('mapV').textContent = 'Eje ' + AXN[p[6]] + ' (' + (p[7] === '1' ? '+' : '−') + ')' + (cal & 2 ? ' · calibrado ✓' : ' · sin calibrar');
-    paused = parseInt(p[8]); updatePause(); drawRadar();
+    paused = parseInt(p[8]); updatePause();
+    if (p.length >= 16) {
+      accel = parseFloat(p[10]); accelThr = parseFloat(p[11]); wakeThr = parseFloat(p[13]);
+      setSlider('AC', accel, accel.toFixed(1));
+      setSlider('AT', accelThr, accelThr + ' °/s');
+      setSlider('IT', parseInt(p[12]), fmtIT(p[12]));
+      setSlider('WT', wakeThr, wakeThr + ' °/s');
+      setSlider('WN', parseInt(p[14]), p[14]);
+      setSleepUI(parseInt(p[15]));
+    }
+    drawRadar(); drawCurve();
   }
+
+  // ---------------- Aceleración y reposo
+  const peaks = [];
+  function fmtIT(v) { return parseInt(v) === 0 ? 'nunca' : v + ' s'; }
+  function multAt(s) { return (accel > 0 && s > accelThr) ? 1 + accel * Math.min((s - accelThr) / accelThr, 3) : 1; }
+  const cv = $('accCurve'), cx = cv.getContext('2d');
+  function drawCurve() {
+    const W = cv.width, H = cv.height, pad = 24, maxS = 200, maxM = 1 + 3 * 3;
+    const X = (s) => pad + (W - pad - 8) * s / maxS;
+    const Y = (m) => H - pad - (H - pad - 10) * (m - 1) / (maxM - 1);
+    cx.clearRect(0, 0, W, H);
+    cx.font = '11px system-ui'; cx.fillStyle = '#64748b'; cx.strokeStyle = '#e2e8f0'; cx.lineWidth = 1;
+    for (let s = 0; s <= maxS; s += 50) { cx.beginPath(); cx.moveTo(X(s), 10); cx.lineTo(X(s), H - pad); cx.stroke(); cx.fillText(s + '°/s', X(s) - 12, H - 8); }
+    for (let m = 1; m <= maxM; m += 2) { cx.fillText('×' + m, 2, Y(m) + 4); }
+    cx.strokeStyle = 'rgba(37,99,235,.35)'; cx.setLineDash([4, 4]);
+    cx.beginPath(); cx.moveTo(X(accelThr), 10); cx.lineTo(X(accelThr), H - pad); cx.stroke(); cx.setLineDash([]);
+    cx.strokeStyle = '#2563eb'; cx.lineWidth = 2.5; cx.beginPath();
+    for (let s = 0; s <= maxS; s += 2) { const x = X(s), y = Y(multAt(s)); s ? cx.lineTo(x, y) : cx.moveTo(x, y); }
+    cx.stroke();
+    const sp = Math.min(maxS, Math.hypot(rateH, rateV));
+    cx.fillStyle = sleeping || paused ? '#94a3b8' : '#10b981';
+    cx.beginPath(); cx.arc(X(sp), Y(multAt(sp)), 6, 0, Math.PI * 2); cx.fill();
+    $('lMult').textContent = '×' + mult.toFixed(1);
+  }
+  function trackPeak(v) {
+    const now = Date.now();
+    peaks.push([now, v]);
+    while (peaks.length && now - peaks[0][0] > 3000) peaks.shift();
+    const pk = Math.max(...peaks.map((p) => p[1]));
+    const full = 320;
+    $('peakFill').style.width = Math.min(100, pk / full * 100) + '%';
+    $('peakFill').style.background = pk >= wakeThr ? '#ef4444' : '#f59e0b';
+    $('peakMark').style.left = Math.min(100, wakeThr / full * 100) + '%';
+    $('lPeak').textContent = 'pico ' + Math.round(pk) + ' °/s';
+  }
+  function setSleepUI(s) {
+    sleeping = s;
+    const el = $('sleepState');
+    el.className = 'sleep-state' + (s ? ' on' : '');
+    el.textContent = s ? '💤 En reposo: haz el gesto para despertar' : '✅ Activo';
+    $('btnSleep').textContent = s ? '☀️ Despertar ahora' : '😴 Poner en reposo ahora';
+    drawRadar(); drawCurve();
+  }
+  $('btnSleep').addEventListener('click', () => send('SL=' + (sleeping ? 0 : 1)));
+  drawCurve();
 
   function setSlider(k, v, label) {
     if (document.activeElement !== $('s' + k)) $('s' + k).value = v;
@@ -324,13 +432,27 @@
   function bindSlider(k, cmd, fmt) {
     const s = $('s' + k);
     const tx = throttled((v) => send(cmd + '=' + v), 120);
-    s.addEventListener('input', () => { $('l' + k).textContent = fmt(s.value); if (k === 'DZ') { deadzone = parseFloat(s.value); drawRadar(); } tx(s.value); });
+    s.addEventListener('input', () => {
+      $('l' + k).textContent = fmt(s.value);
+      const v = parseFloat(s.value);
+      if (k === 'DZ') { deadzone = v; drawRadar(); }
+      if (k === 'AC') accel = v;
+      if (k === 'AT') accelThr = v;
+      if (k === 'WT') { wakeThr = v; trackPeak(0); }
+      drawCurve();
+      tx(s.value);
+    });
     s.addEventListener('change', () => send(cmd + '=' + s.value));
   }
   bindSlider('DZ', 'DZ', (v) => v + ' °/s');
   bindSlider('SM', 'SM', (v) => Math.round(v * 100) + '%');
   bindSlider('GH', 'GH', (v) => v + ' px/°');
   bindSlider('GV', 'GV', (v) => v + ' px/°');
+  bindSlider('AC', 'AC', (v) => parseFloat(v).toFixed(1));
+  bindSlider('AT', 'AT', (v) => v + ' °/s');
+  bindSlider('IT', 'IT', fmtIT);
+  bindSlider('WT', 'WT', (v) => v + ' °/s');
+  bindSlider('WN', 'WN', (v) => v);
 
   $('btnPause').addEventListener('click', () => { paused = paused ? 0 : 1; updatePause(); send('PA=' + paused); });
   function updatePause() {
