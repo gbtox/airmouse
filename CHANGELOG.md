@@ -8,7 +8,7 @@ Bluetooth (Web Bluetooth), en Chrome o Edge.
 
 | Versión | Firmware | Panel | Estado |
 |---|---|---|---|
-| 3.0 | `Arduino/HeadMouse/HeadMouse.ino` + `Sonido.cpp/.h` | `index.html` (tarjetas de sonido) | Compila; panel probado con sonidos simulados; **falta probar en la placa** |
+| 3.0 | `Arduino/HeadMouse/HeadMouse.ino` (un solo archivo) | `index.html` (tarjetas de sonido) | Compila; panel probado con sonidos simulados; **falta probar en la placa** |
 | 2.2 | (reemplazado por 3.0) | publicado en GitHub Pages | Probado en la placa: funciona |
 | 2.1 | (reemplazado por 2.2) | (reemplazado por 2.2) | Probado en la placa |
 | 2.0 | (reemplazado por 2.1) | (reemplazado por 2.1) | Probado: el cursor se mueve bien |
@@ -47,7 +47,7 @@ Para cargar: Arduino IDE, placa *XIAO MG24*, **Herramientas → Protocol stack �
 - Modos del micrófono: apagado (por defecto, no consume), solo medir (para
   probar y enseñar) y activo.
 
-**Cómo funciona en la placa** (`Sonido.cpp`)
+**Cómo funciona en la placa** (sección "Sonido" de `HeadMouse.ino`)
 - IADC a 16 kHz.
 - FFT de 512 puntos cada 16 ms.
 - 16 bandas mel entre 300 y 7000 Hz, medidas sobre un piso de ruido que se

@@ -1052,7 +1052,7 @@
   // (medios dB sobre el piso de ruido). Aquí se graban ejemplos, se comparan
   // los sonidos candidatos y se entrena una red pequeña (208 → 16 → 2|3) que
   // se envía a la placa con MW=. El cálculo de entrada es idéntico al del
-  // firmware (Sonido.cpp, classify).
+  // firmware (HeadMouse.ino, snd::classify).
   const NF = 25, NB = 16, NP = 13, NIN = NP * NB, NHID = 16;
   const DEFAULT_CANDS = ['Chasquido de lengua', 'Pop de labios', 'Soplido "sss"', 'Zumbido "mmm"'];
   const A2_TXT = ['nada', 'Av Pág', 'Re Pág', 'flecha ↓ ×3', 'espacio', 'clic derecho', 'doble clic'];
@@ -1069,7 +1069,7 @@
     for (let i = 0; i < a.length; i++) { const v = parseInt(h.substr(2 * i, 2), 16); a[i] = v > 127 ? v - 256 : v; }
     return a;
   }
-  function pool(f) {   // igual que classify() en Sonido.cpp
+  function pool(f) {   // igual que snd::classify() en HeadMouse.ino
     const x = new Float32Array(NIN);
     for (let t = 0; t < NP; t++) {
       const f0 = 2 * t, f1 = Math.min(2 * t + 1, NF - 1);
