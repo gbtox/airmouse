@@ -78,6 +78,9 @@ Para cargar: Arduino IDE, placa *XIAO MG24*, **Herramientas → Protocol stack �
 vuelve a los valores de fábrica al cargar la 3.0. Los emparejamientos se
 conservan.
 
+**Probado en la placa**: el micrófono funciona en modo "Solo medir". El panel
+3.0 está publicado en GitHub Pages.
+
 **Por confirmar en la placa**
 - `ST:MIC` debe marcar unas **16000 muestras/s**. Si marca otra cifra, el
   disparo del IADC necesita ajuste.
@@ -85,6 +88,7 @@ conservan.
   quieto en silencio.
 - Cada trama debe tardar menos de 3 ms, sin afectar el movimiento del
   cursor.
+- Clic por sonido en modo activo, entrenamiento y carga del modelo.
 
 ---
 
