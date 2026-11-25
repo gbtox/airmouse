@@ -8,13 +8,83 @@ Bluetooth (Web Bluetooth), en Chrome o Edge.
 
 | Versión | Firmware | Panel | Estado |
 |---|---|---|---|
-| 2.2 | `Arduino/HeadMouse/HeadMouse.ino` | `index.html` + `asistente.html` + app (PWA), publicado en GitHub Pages | Probado en la placa: funciona |
+| 3.0 | `Arduino/HeadMouse/HeadMouse.ino` + `Sonido.cpp/.h` | `index.html` (tarjetas de sonido) | Compila; panel probado con sonidos simulados; **falta probar en la placa** |
+| 2.2 | (reemplazado por 3.0) | publicado en GitHub Pages | Probado en la placa: funciona |
 | 2.1 | (reemplazado por 2.2) | (reemplazado por 2.2) | Probado en la placa |
 | 2.0 | (reemplazado por 2.1) | (reemplazado por 2.1) | Probado: el cursor se mueve bien |
 | 1 | `Arduino/Arduino_v1.txt` (respaldo) | anterior (en el historial de git) | Ejes incorrectos para este montaje |
 
 Para cargar: Arduino IDE, placa *XIAO MG24*, **Herramientas → Protocol stack →
 "BLE (Silabs)"**, librería *Seeed Arduino LSM6DS3* ≥ 2.0.4 (se usa 2.0.8).
+
+---
+
+## 3.0 — 2026-11-25
+
+**Nuevo: clic por sonido** con el micrófono analógico de la placa Sense.
+- **Sonido 1 = clic izquierdo.** Dos sonidos 1 seguidos, dentro de un tiempo
+  ajustable (por defecto 500 ms), dan **clic derecho**. Con 0 ms el clic es
+  inmediato y no hay clic derecho.
+- **Sonido 2 = acción a elegir**: Av Pág (por defecto), Re Pág, flecha ↓ ×3,
+  espacio, clic derecho o doble clic. Las teclas salen por el teclado HID
+  de la 2.2, así que **no hay que volver a emparejar**.
+- **Sin entrenar** reconoce un **chasquido** (sonido de menos de 100 ms,
+  agudo y claramente sobre el ruido).
+- **Con entrenamiento** reconoce el sonido propio de la persona. En la
+  tarjeta "🧪 Enseñar sonidos":
+  - Se graban 10 ejemplos de cada sonido candidato y 60 s de ruido normal.
+  - **Comparar** dice cuál se reconoce mejor y cuántos falsos daría.
+  - **Entrenar** arma una red pequeña en el navegador (≈2 s, sin internet).
+    Muestra el acierto con ejemplos que no vio y la carga en la placa
+    (≈3,7 KB, guardada en la flash).
+  - "❌ El último fue un error" agrega un falso al ruido para volver a
+    entrenar.
+  - Las grabaciones se pueden exportar e importar en `.json`.
+- **Clic quieto**: antes del clic se deshace el movimiento del cursor de los
+  ~400 ms anteriores, porque el gesto de la boca mueve los lentes.
+- Los sonidos se ignoran en pausa, en reposo, sin conexión y con la cabeza
+  girando más rápido que el umbral de despertar (estornudo, tos).
+- Modos del micrófono: apagado (por defecto, no consume), solo medir (para
+  probar y enseñar) y activo.
+
+**Cómo funciona en la placa** (`Sonido.cpp`)
+- IADC a 16 kHz.
+- FFT de 512 puntos cada 16 ms.
+- 16 bandas mel entre 300 y 7000 Hz, medidas sobre un piso de ruido que se
+  adapta.
+- Un sonido empieza cuando el nivel supera el piso en el umbral
+  (por defecto 12 dB). Termina con 48 ms de silencio, o a los 400 ms.
+
+**Protocolo**
+- Comandos nuevos:
+  - `MIC=0|1|2`
+  - `MG=` (umbral, dB)
+  - `DT=` (ms)
+  - `A2=0..6`
+  - `CQ=0|1`
+  - `MP=` (probabilidad mínima)
+  - `MW=<off>,<hex>` / `MW=END,<largo>,<crc32>` / `MW=CLR` (modelo)
+- `CFG:` agrega `mic,mg,dt,a2,cq,mp,clasesModelo`.
+- Líneas nuevas:
+  - `ST:MIC,<nivel>,<piso>,<us>,<muestras/s>` (10 Hz)
+  - `EV:<dur>,<centroide>,<pico>,<tramas>,<clase>,<prob>,<800 hex>`
+  - `ST:SND,<clase>,<acción>`
+  - `ST:MODEL,<clases>,<bytes>`
+  - `MW:OK` / `MW:ERR,<motivo>`
+- Por Bluetooth, la salida pasa por una cola y se reintenta si el enlace va
+  lleno (las líneas `EV:` miden ~830 bytes).
+
+**Compatibilidad**: cambió el formato guardado (`HM3A`): la configuración
+vuelve a los valores de fábrica al cargar la 3.0. Los emparejamientos se
+conservan.
+
+**Por confirmar en la placa**
+- `ST:MIC` debe marcar unas **16000 muestras/s**. Si marca otra cifra, el
+  disparo del IADC necesita ajuste.
+- El nivel debe subir con la voz y con un chasquido (+20 dB o más), y estar
+  quieto en silencio.
+- Cada trama debe tardar menos de 3 ms, sin afectar el movimiento del
+  cursor.
 
 ---
 

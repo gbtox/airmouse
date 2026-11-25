@@ -18,6 +18,11 @@ Detalle completo en [CHANGELOG.md](CHANGELOG.md).
   conectar), teclado que abre el asistente al emparejar un PC nuevo,
   asistente paso a paso, configuración por Bluetooth (Web Bluetooth) o USB,
   hasta 4 PC, panel instalable (PWA) y descargable para uso sin internet.
+- **v3.0** (por probar en la placa) — clic por sonido con el micrófono:
+  detector de chasquido sin entrenar, o modelo propio entrenado en el panel
+  (probador que compara sonidos candidatos, ruido normal, red 208 → 16 → 2|3
+  cargada por USB o Bluetooth). Sonido 1 = clic izquierdo, dos seguidos =
+  clic derecho, sonido 2 = acción configurable. Clic quieto.
 
 ## Próximo
 
@@ -49,10 +54,13 @@ para mouses de otras marcas: se empareja desde Ajustes como hoy.
    100 % fijo.
 5. **Perfiles**: guardar 2–3 configuraciones (p. ej. "silla", "cama").
 
-## Futuro con micrófono (la placa Sense trae un micrófono analógico)
+## Futuro con micrófono
 
-- **Detección de sonido corto** (chasquido, "tsk", soplido): umbral de
-  energía + duración máxima → clic o despertar. Es lo más simple y robusto.
+- **Validar la 3.0 en la placa**: frecuencia real de muestreo (debe decir
+  ~16000 muestras/s), nivel del micrófono, falsos con conversación y TV.
+- Despertar del reposo con el sonido 1; arrastrar (sonido = mantener
+  apretado); rueda del mouse para el sonido 2 (obliga a reemparejar).
+- Paso de sonido dentro del asistente 🧭.
 - **Palabra breve**: reconocimiento de 1–3 palabras ("clic", "doble",
   "para") con un modelo pequeño de palabras clave en el propio chip
   (el MG24 tiene acelerador de IA). Requiere grabar muestras de la voz
@@ -70,3 +78,6 @@ para mouses de otras marcas: se empareja desde Ajustes como hoy.
   PC). Si el foco cambia en ese segundo, o si Bloq Mayús está activo, el
   texto puede no llegar bien. Se puede desactivar en el panel.
 - Con varios PC cerca y emparejados, se conecta el primero que la encuentre.
+- Sonido: el ruido de la casa cambia (TV, visitas). Si aparecen clics por
+  error, usar "❌ El último fue un error" y volver a entrenar, o subir la
+  sensibilidad / la seguridad del modelo.

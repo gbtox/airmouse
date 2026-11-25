@@ -97,6 +97,15 @@
     #peakFill { height: 100%; width: 0; background: #f59e0b; }
     .peak-track .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); }
     label.chk { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+    .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .seg button { flex: 1; padding: 9px 6px; border: none; background: #f1f5f9; font-weight: 700; font-size: 14px; color: var(--text); }
+    .seg button + button { border-left: 1px solid var(--border); }
+    .seg button.on { background: var(--primary); color: #fff; }
+    .sel { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border); font: inherit; font-size: 14px; background: #fff; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tbl td, .tbl th { padding: 5px 6px; border-bottom: 1px solid var(--border); text-align: left; }
+    .tbl th { color: var(--muted); font-weight: 600; }
+    .tbl .x { border: none; background: none; color: var(--danger); font-weight: 700; }
   </style>
 </head>
 <body>
@@ -122,7 +131,7 @@
   </div>
 
   <div id="noSerial" class="notice">Este navegador no permite conectarse a la placa. Abre el panel en <b>Chrome</b> o <b>Edge</b> de escritorio.</div>
-  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v2.2) para usar la calibración guiada, la aceleración, el reposo y el emparejamiento.</div>
+  <div id="oldFw" class="notice">La placa no respondió como firmware v2. Carga <b>HeadMouse.ino</b> (v3.0) para usar la calibración guiada, la aceleración, el reposo, el emparejamiento y el clic por sonido.</div>
 
   <div id="mainPanel" class="stack disabled-panel">
     <div class="grid">
@@ -238,6 +247,76 @@
           <div class="raw-row"><b>gz</b><div class="raw-track"><div class="mid"></div><div class="fill" id="fz"></div></div><span id="vz">0</span></div>
         </div>
         <div class="log" id="log"></div>
+      </div>
+    </div>
+
+    <div class="grid" id="sndPanel">
+      <div class="card">
+        <h2>🎤 Clic por sonido</h2>
+        <div class="control-group">
+          <div class="control-header"><span>Micrófono</span><span id="lMic" class="val">apagado</span></div>
+          <div class="seg" id="segMic">
+            <button data-v="0">Apagado</button><button data-v="1">Solo medir</button><button data-v="2">Activo</button>
+          </div>
+          <p class="hint">"Solo medir" muestra los sonidos sin hacer clic, para probar y enseñar. "Activo" hace clic.</p>
+        </div>
+        <div class="peak" style="grid-template-columns:1fr 130px"><div class="peak-track"><div id="micFill" style="height:100%;width:0;background:#10b981"></div><div id="micMark" class="mark"></div></div><span id="lMicLvl">—</span></div>
+        <p class="hint" id="micDiag" style="margin:4px 0 14px">—</p>
+        <div class="control-group">
+          <div class="control-header"><span>🔊 Sensibilidad (umbral sobre el ruido)</span><span id="lMG" class="val">12 dB</span></div>
+          <input type="range" id="sMG" min="6" max="30" step="1" value="12">
+          <p class="hint">Más bajo detecta sonidos más suaves, pero también más ruido. La línea roja de la barra es el umbral.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>✌️ Dos sonidos = clic derecho, dentro de</span><span id="lDT" class="val">500 ms</span></div>
+          <input type="range" id="sDT" min="0" max="900" step="50" value="500">
+          <p class="hint">El clic izquierdo espera este tiempo por si llega el segundo sonido. 0 = clic inmediato y sin clic derecho.</p>
+        </div>
+        <div class="control-group">
+          <div class="control-header"><span>🔉 Sonido 2 hace</span></div>
+          <select id="selA2" class="sel">
+            <option value="0">Nada</option><option value="1">Avanzar una pantalla (Av Pág)</option><option value="2">Retroceder una pantalla (Re Pág)</option>
+            <option value="3">Bajar 3 líneas (flecha ↓ ×3)</option><option value="4">Espacio</option><option value="5">Clic derecho</option><option value="6">Doble clic</option>
+          </select>
+        </div>
+        <label class="chk"><input type="checkbox" id="chkCQ"> Clic quieto: el clic cae donde estaba el cursor al empezar el sonido</label>
+        <div class="control-group">
+          <div class="control-header"><span>🎯 Seguridad del modelo</span><span id="lMP" class="val">75%</span></div>
+          <input type="range" id="sMP" min="0.5" max="0.95" step="0.05" value="0.75">
+          <p class="hint">Más alto = menos clics por error, pero puede ignorar algunos sonidos buenos.</p>
+        </div>
+        <p id="modelState" class="tip">—</p>
+      </div>
+
+      <div class="card">
+        <h2>🧪 Enseñar sonidos</h2>
+        <p class="hint" style="margin-bottom:10px">1) Graba unas 10 veces cada sonido que la persona pueda hacer. 2) <b>Compara</b> para ver cuál se reconoce mejor. 3) Elige el sonido 1 (y el 2 si quieres), graba ruido normal y <b>entrena</b>.</p>
+        <canvas id="evCanvas" width="400" height="110" class="curve"></canvas>
+        <p class="hint" id="evInfo" style="margin:6px 0 10px">Último sonido: —</p>
+        <div class="wiz-inline" style="justify-content:flex-start;margin:0 0 8px">
+          <select id="selCand" class="sel" style="width:auto;flex:1"></select>
+          <button class="btn" id="btnRec">⏺️ Grabar 10</button>
+        </div>
+        <div class="wiz-inline" style="justify-content:flex-start;margin:0 0 8px">
+          <button class="btn secondary" id="btnNoise">🔈 Grabar ruido normal (60 s)</button>
+          <button class="btn secondary" id="btnFalse" title="Agrega el último sonido detectado como ruido">❌ El último fue un error</button>
+        </div>
+        <div class="wiz-status" id="recStatus" style="font-size:16px"></div>
+        <table class="tbl" id="candTable"></table>
+        <div class="stack" style="margin-top:10px">
+          <button class="btn secondary" id="btnCompare">📊 Comparar sonidos</button>
+          <div class="wiz-inline" style="justify-content:flex-start;margin:0">
+            <span style="font-weight:700;font-size:14px">Sonido 1:</span><select id="selS1" class="sel" style="width:auto;flex:1"></select>
+            <span style="font-weight:700;font-size:14px">Sonido 2:</span><select id="selS2" class="sel" style="width:auto;flex:1"></select>
+          </div>
+          <button class="btn" id="btnTrain">🧠 Entrenar y cargar en la placa</button>
+          <div class="wiz-inline" style="justify-content:flex-start;margin:0">
+            <button class="btn secondary" id="btnExport">⬇️ Exportar grabaciones</button>
+            <label class="btn secondary" style="text-align:center">⬆️ Importar<input type="file" id="fileImport" accept=".json" style="display:none"></label>
+            <button class="btn secondary" id="btnClearModel">🗑️ Quitar modelo de la placa</button>
+          </div>
+        </div>
+        <p class="hint" id="trainInfo" style="margin-top:8px"></p>
       </div>
     </div>
 
@@ -447,6 +526,9 @@
   // ---------------- Parser
   function parseLine(line) {
     if (!line) return;
+    if (line.startsWith('ST:MIC,')) { onMicLevel(line); return; }
+    if (line.startsWith('EV:')) { onSoundEv(line); return; }
+    if (line.startsWith('ST:SND,') || line.startsWith('ST:MODEL,') || line.startsWith('MW:')) onSndLine(line);
     if (line.startsWith('R:')) {
       const p = line.slice(2).split(',');
       rateH = parseFloat(p[0]) || 0; rateV = parseFloat(p[1]) || 0;
@@ -507,6 +589,8 @@
       setSleepUI(parseInt(p[15]));
     }
     if (p.length >= 17) $('chkOW').checked = p[16] === '1';
+    $('sndPanel').style.display = p.length >= 24 ? '' : 'none';
+    if (p.length >= 24) applySndConfig(p);
     lastCfg = p;
     drawRadar(); drawCurve();
   }
@@ -962,6 +1046,394 @@
     });
     wizStatus('0 de ' + spots.length);
   }
+
+  // ================= Clic por sonido =================
+  // La placa envía por cada sonido una línea EV: con 25 tramas × 16 bandas
+  // (medios dB sobre el piso de ruido). Aquí se graban ejemplos, se comparan
+  // los sonidos candidatos y se entrena una red pequeña (208 → 16 → 2|3) que
+  // se envía a la placa con MW=. El cálculo de entrada es idéntico al del
+  // firmware (Sonido.cpp, classify).
+  const NF = 25, NB = 16, NP = 13, NIN = NP * NB, NHID = 16;
+  const DEFAULT_CANDS = ['Chasquido de lengua', 'Pop de labios', 'Soplido "sss"', 'Zumbido "mmm"'];
+  const A2_TXT = ['nada', 'Av Pág', 'Re Pág', 'flecha ↓ ×3', 'espacio', 'clic derecho', 'doble clic'];
+  let micMode = 0, micGate = 12, modelClasses = 0, lastEv = null, rec = null;
+  let store = loadStore();
+
+  function loadStore() {
+    try { const s = JSON.parse(localStorage.getItem('hm-snd') || ''); if (s && s.cands && s.noise) return s; } catch (e) {}
+    return { cands: Object.fromEntries(DEFAULT_CANDS.map((n) => [n, []])), noise: [], s1: DEFAULT_CANDS[0], s2: '' };
+  }
+  function saveStore() { try { localStorage.setItem('hm-snd', JSON.stringify(store)); } catch (e) {} }
+  function hexToFeat(h) {
+    const a = new Int8Array(NF * NB);
+    for (let i = 0; i < a.length; i++) { const v = parseInt(h.substr(2 * i, 2), 16); a[i] = v > 127 ? v - 256 : v; }
+    return a;
+  }
+  function pool(f) {   // igual que classify() en Sonido.cpp
+    const x = new Float32Array(NIN);
+    for (let t = 0; t < NP; t++) {
+      const f0 = 2 * t, f1 = Math.min(2 * t + 1, NF - 1);
+      for (let b = 0; b < NB; b++) x[t * NB + b] = (f[f0 * NB + b] + f[f1 * NB + b]) / 32;
+    }
+    return x;
+  }
+  function clsName(c) {
+    if (c <= 0) return 'ruido';
+    if (!modelClasses) return 'chasquido (detector)';
+    return c === 1 ? (store.s1 || 'sonido 1') : (store.s2 || 'sonido 2');
+  }
+
+  // ---- Configuración
+  function applySndConfig(p) {
+    micMode = parseInt(p[17]); micGate = parseFloat(p[18]); modelClasses = parseInt(p[23]) || 0;
+    document.querySelectorAll('#segMic button').forEach((b) => b.classList.toggle('on', parseInt(b.dataset.v) === micMode));
+    $('lMic').textContent = ['apagado', 'solo medir', 'activo'][micMode] || '?';
+    setSlider('MG', micGate, micGate + ' dB');
+    setSlider('DT', parseInt(p[19]), fmtDT(p[19]));
+    if (document.activeElement !== $('selA2')) $('selA2').value = p[20];
+    $('chkCQ').checked = p[21] === '1';
+    setSlider('MP', parseFloat(p[22]), Math.round(parseFloat(p[22]) * 100) + '%');
+    $('micMark').style.left = Math.min(100, micGate / 40 * 100) + '%';
+    updateModelState();
+  }
+  function fmtDT(v) { return parseInt(v) === 0 ? 'sin clic derecho' : v + ' ms'; }
+  document.querySelectorAll('#segMic button').forEach((b) => b.addEventListener('click', () => send('MIC=' + b.dataset.v)));
+  bindSlider('MG', 'MG', (v) => v + ' dB');
+  bindSlider('DT', 'DT', fmtDT);
+  bindSlider('MP', 'MP', (v) => Math.round(v * 100) + '%');
+  $('sMG').addEventListener('input', (e) => { micGate = parseFloat(e.target.value); $('micMark').style.left = Math.min(100, micGate / 40 * 100) + '%'; });
+  $('selA2').addEventListener('change', (e) => send('A2=' + e.target.value));
+  $('chkCQ').addEventListener('change', (e) => send('CQ=' + (e.target.checked ? 1 : 0)));
+
+  function updateModelState() {
+    $('modelState').innerHTML = modelClasses
+      ? `🧠 <b>Modelo cargado</b>: reconoce ${modelClasses === 3 ? 'el sonido 1 y el sonido 2' : 'el sonido 1'}.`
+      : '🔧 <b>Sin modelo</b>: la placa usa el detector de <b>chasquido</b> (sonido corto y agudo, como "tsk" con la lengua). Para otro sonido, enséñalo en la tarjeta de al lado.';
+  }
+
+  // ---- Nivel en vivo
+  function onMicLevel(line) {
+    const [lvl, flo, us, sps] = line.slice(7).split(',').map(parseFloat);
+    const rel = lvl - flo;
+    $('micFill').style.width = Math.max(0, Math.min(100, rel / 40 * 100)) + '%';
+    $('micFill').style.background = rel > micGate ? '#ef4444' : '#10b981';
+    $('lMicLvl').textContent = (rel >= 0 ? '+' : '') + rel.toFixed(0) + ' dB sobre el ruido';
+    const okRate = sps > 15000 && sps < 17000;
+    $('micDiag').textContent = `${Math.round(sps)} muestras/s · ${(us / 1000).toFixed(1)} ms por trama` +
+      (sps && !okRate ? ' · ⚠️ se esperaban 16000 muestras/s' : '');
+  }
+
+  // ---- Eventos
+  const evc = $('evCanvas'), evx = evc.getContext('2d');
+  function drawEv(f) {
+    const W = evc.width, H = evc.height, cw = W / NF, ch = H / NB;
+    evx.clearRect(0, 0, W, H);
+    for (let t = 0; t < NF; t++) for (let b = 0; b < NB; b++) {
+      const v = Math.max(0, Math.min(1, f[t * NB + b] / 60));
+      evx.fillStyle = `rgba(37,99,235,${v})`;
+      evx.fillRect(t * cw, H - (b + 1) * ch, cw + 0.5, ch + 0.5);
+    }
+    evx.fillStyle = '#64748b'; evx.font = '10px system-ui';
+    evx.fillText('agudos', 3, 10); evx.fillText('graves', 3, H - 3); evx.fillText('400 ms →', W - 52, H - 3);
+  }
+  function onSoundEv(line) {
+    const p = line.slice(3).split(',');
+    if (!p[6] || p[6].length !== NF * NB * 2) return;
+    lastEv = { hex: p[6], dur: +p[0], cent: +p[1], peak: +p[2], cls: +p[4], prob: +p[5] };
+    const f = hexToFeat(lastEv.hex);
+    drawEv(f);
+    $('evInfo').textContent = `Último sonido: ${lastEv.dur} ms · ${lastEv.cent} Hz · +${lastEv.peak} dB → ${clsName(lastEv.cls)}` +
+      (modelClasses ? ` (${lastEv.prob} %)` : '');
+    if (!rec) return;
+    if (rec.kind === 'cand') {
+      (store.cands[rec.name] = store.cands[rec.name] || []).push(lastEv.hex);
+      rec.left--;
+      saveStore(); renderCands();
+      if (rec.left <= 0) stopRec('✅ Listo: 10 ejemplos de "' + rec.name + '".');
+      else $('recStatus').textContent = `🎙️ "${rec.name}": haz el sonido otra vez (faltan ${rec.left})`;
+    } else {
+      store.noise.push(lastEv.hex); saveStore(); renderCands();
+    }
+  }
+  function onSndLine(line) {
+    if (line.startsWith('ST:SND,')) {
+      const [c, what] = line.slice(7).split(',');
+      const t = { izq: '🖱️ clic izquierdo', der: '🖱️ clic derecho', doble: '🖱️ doble clic', tecla: '⌨️ ' + A2_TXT[$('selA2').value], ignorado: '⏸️ ignorado (pausa, reposo o cabeza en movimiento)' }[what] || what;
+      $('evInfo').textContent += ' → ' + t;
+    } else if (line.startsWith('ST:MODEL,')) {
+      modelClasses = parseInt(line.slice(9)) || 0; updateModelState();
+    } else if (line === 'MW:OK') {
+      if (upload) { upload = false; $('trainInfo').innerHTML += '<br>✅ <b>Modelo cargado en la placa.</b> Pon el micrófono en "Activo" para usarlo.'; $('btnTrain').disabled = false; }
+    } else if (line.startsWith('MW:ERR')) {
+      upload = false; $('btnTrain').disabled = false;
+      $('trainInfo').innerHTML += '<br>⚠️ La placa rechazó el modelo (' + line.slice(7) + '). Intenta de nuevo.';
+    }
+  }
+
+  // ---- Grabación
+  function startRec(r) {
+    if (!link) { alert('Conecta la placa primero.'); return; }
+    if (rec) stopRec('');
+    rec = Object.assign({ prevMode: micMode }, r);
+    if (micMode !== 1) send('MIC=1');   // solo medir: que no haga clics mientras se graba
+    rec.timer = setInterval(() => {
+      if (rec.kind === 'noise') {
+        const left = Math.ceil((rec.until - Date.now()) / 1000);
+        $('recStatus').textContent = `🔈 Ruido normal: habla, tose, mueve la cabeza, deja la TV… (${left} s, ${store.noise.length} sonidos)`;
+        if (left <= 0) stopRec(`✅ Ruido grabado (${store.noise.length} sonidos en total).`);
+      } else if (Date.now() > rec.until) stopRec('⏱️ Se acabó el tiempo. Puedes grabar otra vez.');
+    }, 250);
+  }
+  function stopRec(msg) {
+    if (!rec) return;
+    clearInterval(rec.timer);
+    if (rec.prevMode !== 1) send('MIC=' + rec.prevMode);
+    rec = null;
+    $('recStatus').textContent = msg;
+  }
+  $('btnRec').addEventListener('click', () => {
+    let name = $('selCand').value;
+    if (name === '__new') {
+      name = (prompt('Nombre del sonido (por ejemplo "chasquido" o "ah corto"):') || '').trim();
+      if (!name) return;
+      store.cands[name] = store.cands[name] || []; saveStore(); renderCands(); $('selCand').value = name;
+    }
+    startRec({ kind: 'cand', name, left: 10, until: Date.now() + 90000 });
+    $('recStatus').textContent = `🎙️ "${name}": haz el sonido, con una pausa de un segundo entre cada uno (faltan 10)`;
+  });
+  $('btnNoise').addEventListener('click', () => startRec({ kind: 'noise', until: Date.now() + 60000 }));
+  $('btnFalse').addEventListener('click', () => {
+    if (!lastEv) return;
+    store.noise.push(lastEv.hex); saveStore(); renderCands();
+    $('recStatus').textContent = '✅ Agregado como ruido. Vuelve a entrenar para que aprenda a ignorarlo.';
+  });
+
+  function renderCands(scores) {
+    const names = Object.keys(store.cands);
+    const sel = $('selCand'), cur = sel.value;
+    sel.innerHTML = names.map((n) => `<option>${esc(n)}</option>`).join('') + '<option value="__new">➕ Otro sonido…</option>';
+    if (names.includes(cur)) sel.value = cur;
+    const withData = names.filter((n) => store.cands[n].length >= 5);
+    $('selS1').innerHTML = withData.map((n) => `<option>${esc(n)}</option>`).join('') || '<option value="">(graba un sonido)</option>';
+    $('selS2').innerHTML = '<option value="">(ninguno)</option>' + withData.map((n) => `<option>${esc(n)}</option>`).join('');
+    if (withData.includes(store.s1)) $('selS1').value = store.s1;
+    $('selS2').value = withData.includes(store.s2) ? store.s2 : '';
+    const rows = names.map((n) => {
+      const s = scores && scores[n];
+      return `<tr><td>${esc(n)}</td><td>${store.cands[n].length}</td><td>${s ? `<b>${s.acc} %</b> · falsos ${s.fa} %${s.best ? ' ⭐' : ''}` : '—'}</td>
+        <td><button class="x" data-del="${esc(n)}" title="Borrar estas grabaciones">✕</button></td></tr>`;
+    });
+    rows.push(`<tr><td>Ruido normal</td><td>${store.noise.length}</td><td></td><td><button class="x" data-del="__noise" title="Borrar el ruido">✕</button></td></tr>`);
+    $('candTable').innerHTML = '<tr><th>Sonido</th><th>Ejemplos</th><th>Reconocimiento</th><th></th></tr>' + rows.join('');
+    $('candTable').querySelectorAll('[data-del]').forEach((b) => b.onclick = () => {
+      const n = b.dataset.del;
+      if (!confirm('¿Borrar las grabaciones de "' + (n === '__noise' ? 'ruido' : n) + '"?')) return;
+      if (n === '__noise') store.noise = [];
+      else if (DEFAULT_CANDS.includes(n)) store.cands[n] = [];
+      else delete store.cands[n];
+      saveStore(); renderCands();
+    });
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  $('selS1').addEventListener('change', (e) => { store.s1 = e.target.value; saveStore(); });
+  $('selS2').addEventListener('change', (e) => { store.s2 = e.target.value; saveStore(); });
+
+  // ---- Comparar: vecino más cercano, dejando uno fuera
+  $('btnCompare').addEventListener('click', () => {
+    const names = Object.keys(store.cands).filter((n) => store.cands[n].length >= 5);
+    if (!names.length) { $('recStatus').textContent = 'Graba al menos 5 ejemplos de un sonido.'; return; }
+    const items = [];
+    names.forEach((n) => store.cands[n].forEach((h) => items.push({ c: n, x: pool(hexToFeat(h)) })));
+    store.noise.forEach((h) => items.push({ c: '__noise', x: pool(hexToFeat(h)) }));
+    const d2 = (a, b) => { let s = 0; for (let i = 0; i < NIN; i++) { const d = a[i] - b[i]; s += d * d; } return s; };
+    const pred = items.map((it, i) => {
+      let best = Infinity, c = null;
+      items.forEach((o, j) => { if (j !== i) { const d = d2(it.x, o.x); if (d < best) { best = d; c = o.c; } } });
+      return c;
+    });
+    const scores = {};
+    const nNoise = items.filter((it) => it.c === '__noise').length;
+    names.forEach((n) => {
+      const mine = items.map((it, i) => [it, pred[i]]).filter(([it]) => it.c === n);
+      const acc = Math.round(100 * mine.filter(([, p]) => p === n).length / mine.length);
+      const fa = nNoise ? Math.round(100 * items.filter((it, i) => it.c === '__noise' && pred[i] === n).length / nNoise) : 0;
+      scores[n] = { acc, fa, score: acc - 2 * fa };
+    });
+    const best = names.reduce((a, b) => scores[b].score > scores[a].score ? b : a);
+    scores[best].best = true;
+    renderCands(scores);
+    $('recStatus').textContent = `⭐ El más fácil de reconocer: "${best}".` + (nNoise < 10 ? ' Graba ruido normal para medir también los falsos.' : '');
+  });
+
+  // ---- Entrenamiento: red 208 → 16 (ReLU) → 2|3 (softmax), Adam
+  function randn() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function augment(f) {   // desplazamiento de ±1 trama y ganancia de ±6 dB
+    const sh = Math.floor(Math.random() * 3) - 1, g = Math.round((Math.random() * 2 - 1) * 12);
+    const o = new Int8Array(f.length);
+    for (let t = 0; t < NF; t++) {
+      const s = t - sh;
+      if (s < 0 || s >= NF) continue;
+      for (let b = 0; b < NB; b++) { const v = f[s * NB + b]; o[t * NB + b] = v > 0 ? Math.max(0, Math.min(127, v + g)) : v; }
+    }
+    return o;
+  }
+  function makeNet(nO) {
+    const W1 = new Float32Array(NHID * NIN).map(() => randn() * Math.sqrt(2 / NIN));
+    const W2 = new Float32Array(nO * NHID).map(() => randn() * Math.sqrt(1 / NHID));
+    return { nO, W1, b1: new Float32Array(NHID), W2, b2: new Float32Array(nO) };
+  }
+  function forward(net, x, h) {
+    const { nO, W1, b1, W2, b2 } = net, z = new Float32Array(nO);
+    for (let j = 0; j < NHID; j++) { let a = b1[j]; const o = j * NIN; for (let i = 0; i < NIN; i++) a += W1[o + i] * x[i]; h[j] = a > 0 ? a : 0; }
+    let mx = -Infinity;
+    for (let k = 0; k < nO; k++) { let a = b2[k]; for (let j = 0; j < NHID; j++) a += W2[k * NHID + j] * h[j]; z[k] = a; mx = Math.max(mx, a); }
+    let s = 0; for (let k = 0; k < nO; k++) { z[k] = Math.exp(z[k] - mx); s += z[k]; }
+    for (let k = 0; k < nO; k++) z[k] /= s;
+    return z;
+  }
+  async function train(net, data, epochs, onProgress) {
+    const P = ['W1', 'b1', 'W2', 'b2'], m = {}, v = {};
+    P.forEach((k) => { m[k] = new Float32Array(net[k].length); v[k] = new Float32Array(net[k].length); });
+    const counts = new Array(net.nO).fill(0); data.forEach((d) => counts[d.y]++);
+    const cw = counts.map((c) => c ? data.length / (net.nO * c) : 0);
+    const lr = 0.003, b1m = 0.9, b2m = 0.999, eps = 1e-8, l2 = 1e-4, B = 32;
+    let step = 0;
+    const h = new Float32Array(NHID);
+    for (let ep = 0; ep < epochs; ep++) {
+      const order = data.map((_, i) => i).sort(() => Math.random() - 0.5);
+      for (let s = 0; s < order.length; s += B) {
+        const g = {}; P.forEach((k) => g[k] = new Float32Array(net[k].length));
+        const batch = order.slice(s, s + B);
+        for (const i of batch) {
+          const d = data[i], x = pool(augment(d.f));
+          const z = forward(net, x, h);
+          const dz = new Float32Array(net.nO);
+          for (let k = 0; k < net.nO; k++) dz[k] = (z[k] - (k === d.y ? 1 : 0)) * cw[d.y];
+          const dh = new Float32Array(NHID);
+          for (let k = 0; k < net.nO; k++) {
+            g.b2[k] += dz[k];
+            for (let j = 0; j < NHID; j++) { g.W2[k * NHID + j] += dz[k] * h[j]; dh[j] += dz[k] * net.W2[k * NHID + j]; }
+          }
+          for (let j = 0; j < NHID; j++) {
+            if (h[j] <= 0) continue;
+            g.b1[j] += dh[j];
+            const o = j * NIN;
+            for (let i = 0; i < NIN; i++) g.W1[o + i] += dh[j] * x[i];
+          }
+        }
+        step++;
+        for (const k of P) {
+          const w = net[k], gk = g[k], mk = m[k], vk = v[k];
+          for (let i = 0; i < w.length; i++) {
+            const gi = gk[i] / batch.length + (k[0] === 'W' ? l2 * w[i] : 0);
+            mk[i] = b1m * mk[i] + (1 - b1m) * gi; vk[i] = b2m * vk[i] + (1 - b2m) * gi * gi;
+            w[i] -= lr * (mk[i] / (1 - b1m ** step)) / (Math.sqrt(vk[i] / (1 - b2m ** step)) + eps);
+          }
+        }
+      }
+      if (ep % 5 === 4) { onProgress(ep + 1); await new Promise((r) => setTimeout(r, 0)); }
+    }
+  }
+  function quantize(net) {   // W1 a int8 con escala por neurona, como en la placa
+    const q = { nO: net.nO, s1: new Float32Array(NHID), W1q: new Int8Array(NHID * NIN), b1: net.b1, W2: net.W2, b2: net.b2 };
+    for (let j = 0; j < NHID; j++) {
+      let mx = 0; for (let i = 0; i < NIN; i++) mx = Math.max(mx, Math.abs(net.W1[j * NIN + i]));
+      const s = mx / 127 || 1e-6; q.s1[j] = s;
+      for (let i = 0; i < NIN; i++) q.W1q[j * NIN + i] = Math.round(net.W1[j * NIN + i] / s);
+    }
+    return q;
+  }
+  function predictQ(q, f) {   // misma cuenta que classify() en la placa
+    const x = pool(f), h = new Float32Array(NHID);
+    for (let j = 0; j < NHID; j++) { let a = 0; for (let i = 0; i < NIN; i++) a += q.W1q[j * NIN + i] * x[i]; const v = q.s1[j] * a + q.b1[j]; h[j] = v > 0 ? v : 0; }
+    const z = []; for (let k = 0; k < q.nO; k++) { let a = q.b2[k]; for (let j = 0; j < NHID; j++) a += q.W2[k * NHID + j] * h[j]; z.push(a); }
+    const mx = Math.max(...z), e = z.map((a) => Math.exp(a - mx)), s = e.reduce((a, b) => a + b, 0);
+    return e.map((a) => a / s);
+  }
+  function evaluate(q, data, minP) {
+    let ok = [0, 0, 0], n = [0, 0, 0], fa = 0;
+    for (const d of data) {
+      const p = predictQ(q, d.f); let c = p.indexOf(Math.max(...p)); if (c > 0 && p[c] < minP) c = 0;
+      n[d.y]++; if (c === d.y) ok[d.y]++; if (d.y === 0 && c > 0) fa++;
+    }
+    return { acc: n.map((c, k) => c ? Math.round(100 * ok[k] / c) : null), fa: n[0] ? Math.round(100 * fa / n[0]) : null };
+  }
+  function buildBlob(q) {
+    const len = 8 + 4 * (2 * NHID + q.nO * NHID + q.nO) + NHID * NIN;
+    const buf = new ArrayBuffer(len), dv = new DataView(buf);
+    dv.setUint32(0, 0x314D5348, true); dv.setUint16(4, NIN, true); dv.setUint8(6, NHID); dv.setUint8(7, q.nO);
+    let o = 8;
+    for (const arr of [q.s1, q.b1, q.W2, q.b2]) for (const v of arr) { dv.setFloat32(o, v, true); o += 4; }
+    new Int8Array(buf, o).set(q.W1q);
+    return new Uint8Array(buf);
+  }
+  function crc32(d) {
+    let c = 0xFFFFFFFF;
+    for (const b of d) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); }
+    return (~c) >>> 0;
+  }
+  let upload = false;
+  $('btnTrain').addEventListener('click', async () => {
+    const s1 = $('selS1').value, s2 = $('selS2').value;
+    const info = $('trainInfo');
+    if (!s1) { info.textContent = 'Graba al menos 5 ejemplos de un sonido y elígelo como sonido 1.'; return; }
+    if (s2 === s1) { info.textContent = 'El sonido 2 tiene que ser distinto del sonido 1.'; return; }
+    if (store.noise.length < 10) { info.textContent = 'Graba primero el ruido normal (60 s), para que aprenda qué ignorar.'; return; }
+    store.s1 = s1; store.s2 = s2; saveStore();
+    const nO = s2 ? 3 : 2;
+    const data = [];
+    store.noise.forEach((h) => data.push({ f: hexToFeat(h), y: 0 }));
+    store.cands[s1].forEach((h) => data.push({ f: hexToFeat(h), y: 1 }));
+    if (s2) store.cands[s2].forEach((h) => data.push({ f: hexToFeat(h), y: 2 }));
+    $('btnTrain').disabled = true;
+    // 1) Validación: entrena con el 80 % y mide con el 20 % que no vio
+    const shuffled = data.slice().sort(() => Math.random() - 0.5);
+    const val = [], tr = [];
+    shuffled.forEach((d) => (val.filter((v) => v.y === d.y).length < Math.floor(data.filter((x) => x.y === d.y).length * 0.2) ? val : tr).push(d));
+    const minP = parseFloat($('sMP').value);
+    let net = makeNet(nO);
+    await train(net, tr, 120, (e) => info.textContent = `Entrenando (prueba)… ${Math.round(e / 120 * 100)} %`);
+    const vr = evaluate(quantize(net), val, minP);
+    // 2) Modelo final con todos los ejemplos
+    net = makeNet(nO);
+    await train(net, data, 150, (e) => info.textContent = `Entrenando (final)… ${Math.round(e / 150 * 100)} %`);
+    const q = quantize(net), fr = evaluate(q, data, minP);
+    const pc = (v) => v === null ? '—' : v + ' %';
+    info.innerHTML = `Con ejemplos que el modelo <b>no vio</b>: ${esc(s1)} ${pc(vr.acc[1])}` + (s2 ? `, ${esc(s2)} ${pc(vr.acc[2])}` : '') +
+      `, falsos con ruido ${pc(vr.fa)}.<br>Con todos los ejemplos: ${pc(fr.acc[1])}` + (s2 ? ` / ${pc(fr.acc[2])}` : '') + `, falsos ${pc(fr.fa)}.` +
+      ((vr.acc[1] !== null && vr.acc[1] < 80) || (vr.fa !== null && vr.fa > 10) ? '<br>⚠️ Todavía confunde bastante: graba más ejemplos o prueba otro sonido.' : '');
+    if (!link) { info.innerHTML += '<br>Conecta la placa para cargarlo.'; $('btnTrain').disabled = false; return; }
+    const blob = buildBlob(q), crc = crc32(blob);
+    const hex = Array.from(blob, (b) => b.toString(16).padStart(2, '0')).join('');
+    info.innerHTML += `<br>Enviando a la placa (${blob.length} bytes)…`;
+    upload = true;
+    for (let o = 0; o < blob.length; o += 48) send(`MW=${o},${hex.slice(2 * o, 2 * (o + 48))}`);
+    send(`MW=END,${blob.length},${crc.toString(16)}`);
+    setTimeout(() => { if (upload) { upload = false; $('btnTrain').disabled = false; info.innerHTML += '<br>⚠️ La placa no confirmó. ¿Tiene el firmware 3.0?'; } }, 15000);
+  });
+  $('btnClearModel').addEventListener('click', () => { if (confirm('¿Quitar el modelo de la placa? Volverá a usar el detector de chasquido.')) send('MW=CLR'); });
+
+  // ---- Exportar / importar grabaciones (respaldo o para otra placa)
+  $('btnExport').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ headmouseSonidos: 1, ...store })], { type: 'application/json' }));
+    a.download = 'HeadMouse-sonidos.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $('fileImport').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    try {
+      const s = JSON.parse(await file.text());
+      if (!s.cands || !Array.isArray(s.noise)) throw new Error('formato');
+      const okHex = (h) => typeof h === 'string' && /^[0-9a-f]{800}$/.test(h);
+      store = { cands: {}, noise: s.noise.filter(okHex), s1: String(s.s1 || ''), s2: String(s.s2 || '') };
+      for (const [n, arr] of Object.entries(s.cands)) if (Array.isArray(arr)) store.cands[String(n).slice(0, 40)] = arr.filter(okHex);
+      saveStore(); renderCands();
+      $('recStatus').textContent = '✅ Grabaciones importadas.';
+    } catch (err) { alert('No se pudo leer el archivo: ' + err.message); }
+  });
+  renderCands(); updateModelState(); drawEv(new Int8Array(NF * NB));
 
   // ================= App instalable (PWA) y uso sin internet =================
   let deferredPrompt = null;

@@ -34,6 +34,16 @@
     (Web Bluetooth) con los mismos comandos que por USB.
   - Hasta 4 PC emparejados; al llenarse se reemplaza el de uso mas antiguo.
 
+  v3.0:
+  - Clic por sonido con el microfono de la placa (ver Sonido.h). Sonido 1 =
+    clic izquierdo; dos sonidos 1 dentro de DT ms = clic derecho. Sonido 2 =
+    accion configurable (Av Pag, Re Pag, flechas, espacio, clic derecho,
+    doble clic). Sin modelo cargado usa un detector de chasquido por reglas;
+    con modelo (entrenado en el panel y enviado con MW=) reconoce el sonido
+    propio de la persona.
+  - Clic quieto: antes del clic se deshace el movimiento de los ultimos
+    ~400 ms, para que el clic caiga donde estaba el cursor al empezar el sonido.
+
   Protocolo (USB serie a 115200, o BLE: caracteristica CMD para escribir y
   OUT para recibir notificaciones; lineas terminadas en \n):
     Entrada:  GET | DZ=<dps> | SM=<0..0.95> | GH=<px/grado> | GV=<px/grado>
@@ -49,9 +59,21 @@
               PAIR           reabrir 60 s el aviso Swift Pair
               UNPAIR         olvidar todos los PC emparejados
               OW=<0|1>       abrir el asistente al emparejar un PC nuevo
+              MIC=<0|1|2>    microfono: 0 apagado, 1 solo medir, 2 acciones activas
+              MG=<dB>        umbral de inicio de sonido sobre el piso de ruido
+              DT=<ms>        ventana para el doble sonido = clic derecho (0 = sin)
+              A2=<0..6>      sonido 2: 0 nada, 1 AvPag, 2 RePag, 3 flecha abajo x3,
+                             4 espacio, 5 clic derecho, 6 doble clic
+              CQ=<0|1>       clic quieto (deshacer el movimiento del sonido)
+              MP=<0.5..0.99> probabilidad minima del modelo
+              MW=<off>,<hex> | MW=END,<largo>,<crc32 hex> | MW=CLR   cargar modelo
     Salida:   VER:<v>
               CFG:dz,sm,gh,gv,ejeH,signoH,ejeV,signoV,pausa,calibrado,
-                  ac,at,it,wt,wn,reposo,ow
+                  ac,at,it,wt,wn,reposo,ow,mic,mg,dt,a2,cq,mp,clasesModelo
+              ST:MIC,<nivel dB>,<piso dB>,<us por trama>,<muestras/s>
+              EV:<dur ms>,<centroide Hz>,<pico dB>,<tramas>,<clase>,<prob %>,<800 hex>
+              ST:SND,<clase>,<izq|der|tecla|doble|ignorado>
+              ST:MODEL,<clases>,<bytes>   |  MW:OK | MW:ERR,<motivo>
               ST:PAIR,<0|1>        aviso Swift Pair activo
               ST:BONDS,<n>         PC emparejados guardados
               R:<h>,<v>,<mult>     velocidad mapeada en grados/s y multiplicador
@@ -67,9 +89,10 @@
 #include <Wire.h>
 #include <EEPROM.h>
 #include <math.h>
+#include "Sonido.h"
 
 #define DEVICE_NAME "HeadMouse-MG24"
-#define FW_VERSION  "2.2"
+#define FW_VERSION  "3.0"
 #define WIZARD_CMD  "msedge gbtox.github.io/airmouse/asistente"
 
 #ifndef LED_BUILTIN_ACTIVE
@@ -82,7 +105,7 @@
 #endif
 
 // ---------------------------------------------------------------- Config
-const uint32_t CONFIG_MAGIC = 0x484D3245; // "HM2E": v2.2 (agrega openWizard)
+const uint32_t CONFIG_MAGIC = 0x484D3341; // "HM3A": v3.0 (agrega sonido)
 
 struct ConfigData {
   uint32_t magic;
@@ -101,6 +124,12 @@ struct ConfigData {
   float wakeThr;      // grados/s de un giro brusco
   uint8_t wakeCount;  // giros bruscos para despertar
   uint8_t openWizard; // 1 = abrir el asistente al emparejar un PC nuevo
+  uint8_t micMode;    // 0 apagado, 1 solo medir, 2 acciones activas
+  float micGate;      // dB sobre el piso para detectar un sonido
+  uint16_t dblMs;     // dos sonidos 1 dentro de este tiempo = clic derecho (0 = sin)
+  uint8_t act2;       // accion del sonido 2
+  uint8_t stillClick; // deshacer el movimiento durante el sonido
+  float minProb;      // probabilidad minima del modelo
 };
 ConfigData cfg;
 
@@ -124,6 +153,12 @@ void setDefaults() {
   cfg.wakeThr = 120.0f;
   cfg.wakeCount = 2;    // "no" rapido: izquierda-derecha
   cfg.openWizard = 1;
+  cfg.micMode = 0;      // el microfono se activa desde el panel
+  cfg.micGate = 12.0f;
+  cfg.dblMs = 500;
+  cfg.act2 = 1;         // Av Pag
+  cfg.stillClick = 1;
+  cfg.minProb = 0.75f;
 }
 
 bool configValid() {
@@ -140,6 +175,10 @@ bool configValid() {
   if (isnan(cfg.wakeThr) || cfg.wakeThr < 30 || cfg.wakeThr > 500) return false;
   if (cfg.wakeCount < 1 || cfg.wakeCount > 4) return false;
   if (cfg.openWizard > 1) return false;
+  if (cfg.micMode > 2) return false;
+  if (isnan(cfg.micGate) || cfg.micGate < 4 || cfg.micGate > 40) return false;
+  if (cfg.dblMs > 1000 || cfg.act2 > 6 || cfg.stillClick > 1) return false;
+  if (isnan(cfg.minProb) || cfg.minProb < 0.5f || cfg.minProb > 0.99f) return false;
   return true;
 }
 
@@ -225,29 +264,62 @@ static void ble_initialize_gatt_db();
 static void ble_start_advertising();
 void bleNotifyOut(const uint8_t* data, size_t len);
 void openPairWindow();
+void applyMic();
+void sendModelInfo();
+
+// Sonido
+float headPeak = 0;                  // giro mas rapido reciente (decae), para ignorar sonidos con la cabeza en movimiento
+struct MoveRec { uint32_t t; int8_t dx, dy; };
+static MoveRec moveHist[64];         // ultimos ~640 ms de movimiento enviado
+static uint8_t moveIdx = 0;
+bool pendingS1 = false;              // sonido 1 esperando por si llega el segundo (clic derecho)
+uint32_t pendingOnset = 0;
+uint8_t keyQ[8]; uint8_t keyQn = 0, keyQi = 0;   // teclas del sonido 2
+bool keyDown = false;
+unsigned long keyNext = 0;
 
 // Salida doble: todo lo que se imprime va al USB y, si el panel esta
 // suscrito por Bluetooth, tambien a la caracteristica OUT (en trozos de 20
 // bytes, que caben con cualquier MTU).
+// Las lineas completas pasan a un anillo y bleTxTask() las envia desde loop(),
+// reintentando si el stack no tiene bufer libre (las lineas EV: son largas).
+static uint8_t bleTx[2048];
+static volatile uint16_t txHead = 0, txTail = 0;
 class DualOut : public Print {
  public:
   bool bleMute = false;
   size_t write(uint8_t c) override {
     Serial.write(c);
     if (!cfgOutSub || bleMute) return 1;
-    if (len < sizeof(buf)) buf[len++] = c;
-    if (c == '\n') flushLine();
+    if (len < sizeof(buf)) buf[len++] = c; else over = true;
+    if (c == '\n') {
+      uint16_t used = (txHead - txTail + sizeof(bleTx)) % sizeof(bleTx);
+      if (!over && used + len < sizeof(bleTx) - 1) {   // sin espacio: se descarta la linea entera
+        uint16_t h = txHead;
+        for (size_t i = 0; i < len; i++) { bleTx[h] = buf[i]; h = (h + 1) % sizeof(bleTx); }
+        txHead = h;
+      }
+      len = 0; over = false;
+    }
     return 1;
   }
-  void flushLine() {
-    for (size_t i = 0; i < len; i += 20) bleNotifyOut(buf + i, min((size_t)20, len - i));
-    len = 0;
-  }
  private:
-  uint8_t buf[96];
+  uint8_t buf[900];
   size_t len = 0;
+  bool over = false;
 };
 DualOut out;
+
+void bleTxTask() {
+  if (!cfgOutSub) { txTail = txHead; return; }
+  for (int k = 0; k < 6 && txTail != txHead; k++) {
+    uint8_t chunk[20]; size_t n = 0;
+    uint16_t t = txTail;
+    while (n < 20 && t != txHead) { chunk[n++] = bleTx[t]; t = (t + 1) % sizeof(bleTx); }
+    if (sl_bt_gatt_server_notify_all(cfg_out, n, chunk) != SL_STATUS_OK) break;   // reintentar luego
+    txTail = t;
+  }
+}
 
 // ---------------------------------------------------------------- Utilidades
 void led(bool on) { digitalWrite(LED_BUILTIN, on ? LED_BUILTIN_ACTIVE : LED_BUILTIN_INACTIVE); }
@@ -287,7 +359,14 @@ void sendConfig() {
   out.print(cfg.wakeThr, 0);   out.print(',');
   out.print(cfg.wakeCount);    out.print(',');
   out.print(sleeping);         out.print(',');
-  out.println(cfg.openWizard);
+  out.print(cfg.openWizard);   out.print(',');
+  out.print(cfg.micMode);      out.print(',');
+  out.print(cfg.micGate, 0);   out.print(',');
+  out.print(cfg.dblMs);        out.print(',');
+  out.print(cfg.act2);         out.print(',');
+  out.print(cfg.stillClick);   out.print(',');
+  out.print(cfg.minProb, 2);   out.print(',');
+  out.println(snd::modelClasses());
 }
 
 void setSleep(uint8_t s) {
@@ -463,16 +542,40 @@ void handleCommand(char* c) {
     openPairWindow();
   } else if (!strncmp(c, "OW=", 3)) {
     cfg.openWizard = atoi(c + 3) ? 1 : 0; markDirty(); sendConfig();
+  } else if (!strncmp(c, "MIC=", 4)) {
+    cfg.micMode = constrain(atoi(c + 4), 0, 2); applyMic(); markDirty(); sendConfig();
+  } else if (!strncmp(c, "MG=", 3)) {
+    cfg.micGate = constrain(atof(c + 3), 4.0f, 40.0f); snd::onsetDb = cfg.micGate; markDirty();
+  } else if (!strncmp(c, "DT=", 3)) {
+    cfg.dblMs = constrain(atoi(c + 3), 0, 1000); markDirty();
+  } else if (!strncmp(c, "A2=", 3)) {
+    cfg.act2 = constrain(atoi(c + 3), 0, 6); markDirty(); sendConfig();
+  } else if (!strncmp(c, "CQ=", 3)) {
+    cfg.stillClick = atoi(c + 3) ? 1 : 0; markDirty(); sendConfig();
+  } else if (!strncmp(c, "MP=", 3)) {
+    cfg.minProb = constrain(atof(c + 3), 0.5f, 0.99f); markDirty();
+  } else if (!strcmp(c, "MW=CLR")) {
+    snd::mwClear(); out.println("MW:OK"); sendModelInfo(); sendConfig();
+  } else if (!strncmp(c, "MW=END,", 7)) {
+    unsigned int len = 0; unsigned long crc = 0;
+    if (sscanf(c + 7, "%u,%lx", &len, &crc) != 2) { out.println("MW:ERR,formato"); return; }
+    const char* err = snd::mwEnd(len, crc);
+    if (err) { out.print("MW:ERR,"); out.println(err); } else out.println("MW:OK");
+    sendModelInfo(); sendConfig();
+  } else if (!strncmp(c, "MW=", 3)) {
+    char* comma = strchr(c + 3, ',');
+    if (!comma || !snd::mwChunk(atoi(c + 3), comma + 1)) out.println("MW:ERR,trozo");
   } else if (!strcmp(c, "RST")) {
-    setDefaults(); markDirty(); sendConfig();
+    setDefaults(); applyMic(); markDirty(); sendConfig();
   } else {
     out.print("ERR:comando desconocido "); out.println(c);
   }
+  if (!strcmp(c, "GET")) sendModelInfo();
 }
 
 // Lector de lineas: uno para USB y otro para BLE, asi no se mezclan
 struct LineReader {
-  char buf[48];
+  char buf[128];
   uint8_t len = 0;
   void feed(char ch) {
     if (ch == '\n' || ch == '\r') {
@@ -486,11 +589,11 @@ LineReader usbReader, bleReader;
 
 // Los comandos por BLE llegan en el contexto del stack Bluetooth; se copian a
 // un anillo y se procesan en loop() (calibrateOffset usa delay, EEPROM, etc.).
-static char bleRx[128];
-static volatile uint8_t bleRxHead = 0, bleRxTail = 0;
+static char bleRx[256];
+static volatile uint16_t bleRxHead = 0, bleRxTail = 0;
 void bleRxPush(const uint8_t* d, size_t n) {
   for (size_t i = 0; i < n; i++) {
-    uint8_t next = (bleRxHead + 1) % sizeof(bleRx);
+    uint16_t next = (bleRxHead + 1) % sizeof(bleRx);
     if (next == bleRxTail) return;   // lleno: se descarta el resto
     bleRx[bleRxHead] = (char)d[i];
     bleRxHead = next;
@@ -557,6 +660,144 @@ void keyboardTask() {
   welcomeStep++;
 }
 
+// ---------------------------------------------------------------- Sonido
+void applyMic() {
+  snd::onsetDb = cfg.micGate;
+  if (cfg.micMode && !snd::running()) snd::begin();
+  if (!cfg.micMode && snd::running()) snd::end();
+  pendingS1 = false;
+}
+
+void sendModelInfo() {
+  out.print("ST:MODEL,"); out.print(snd::modelClasses()); out.print(','); out.println(snd::modelBytes());
+}
+
+bool linkReady() {
+  return connection_handle != SL_BT_INVALID_CONNECTION_HANDLE && bonding_handle != SL_BT_INVALID_BONDING_HANDLE;
+}
+
+void sendButtons(uint8_t b) {
+  uint8_t r[3] = { 0, 0, b };
+  sl_bt_gatt_server_notify_all(hid_report, sizeof(r), r);
+}
+
+// Deshace el movimiento enviado desde el instante t (el gesto de la boca
+// puede mover los lentes mientras suena)
+void undoSince(uint32_t t) {
+  int sx = 0, sy = 0;
+  for (auto& m : moveHist) {
+    if (m.t && (long)(m.t - t) >= 0) { sx += m.dx; sy += m.dy; m.dx = m.dy = 0; }
+  }
+  while (sx || sy) {
+    int dx = constrain(-sx, -127, 127), dy = constrain(-sy, -127, 127);
+    uint8_t r[3] = { (uint8_t)(int8_t)dx, (uint8_t)(int8_t)dy, 0 };
+    sl_bt_gatt_server_notify_all(hid_report, sizeof(r), r);
+    sx += dx; sy += dy;
+  }
+}
+
+void soundClick(uint8_t btn, uint32_t since, bool dbl) {
+  if (!linkReady()) return;
+  if (cfg.stillClick) undoSince(since - 32);
+  sendButtons(btn); sendButtons(0);
+  if (dbl) { sendButtons(btn); sendButtons(0); }
+  resetMotion();
+  cooldownUntil = millis() + 250;   // el cursor espera un momento quieto tras el clic
+  lastActivity = millis();
+}
+
+void queueKeys(uint8_t key, uint8_t n) {
+  if (keyQn) return;   // aun enviando la anterior
+  for (uint8_t i = 0; i < n && i < sizeof(keyQ); i++) keyQ[i] = key;
+  keyQn = min(n, (uint8_t)sizeof(keyQ)); keyQi = 0; keyDown = false; keyNext = millis();
+}
+
+void keyQueueTask() {
+  if (!keyQn || welcomeStep >= 0 || (long)(millis() - keyNext) < 0) return;
+  if (!keyDown) { sendKey(0, keyQ[keyQi]); keyDown = true; }
+  else { sendKey(0, 0); keyDown = false; if (++keyQi >= keyQn) keyQn = 0; }
+  keyNext = millis() + 20;
+}
+
+void sndReport(int cls, const char* what) {
+  out.print("ST:SND,"); out.print(cls); out.print(','); out.println(what);
+}
+
+void action2(uint32_t onset) {
+  switch (cfg.act2) {
+    case 1: queueKeys(0x4E, 1); sndReport(2, "tecla"); break;   // Av Pag
+    case 2: queueKeys(0x4B, 1); sndReport(2, "tecla"); break;   // Re Pag
+    case 3: queueKeys(0x51, 3); sndReport(2, "tecla"); break;   // flecha abajo x3
+    case 4: queueKeys(0x2C, 1); sndReport(2, "tecla"); break;   // espacio
+    case 5: soundClick(2, onset, false); sndReport(2, "der"); break;
+    case 6: soundClick(1, onset, true); sndReport(2, "doble"); break;
+    default: break;
+  }
+}
+
+void onSoundEvent(const snd::Event& ev) {
+  float pr[3] = { 0, 0, 0 };
+  int cls;
+  if (snd::modelLoaded()) {
+    cls = snd::classify(ev, pr);
+    if (cls > 0 && pr[cls] < cfg.minProb) cls = 0;
+  } else {
+    cls = snd::ruleClick(ev) ? 1 : 0;
+    pr[cls] = 1;
+  }
+  // Para el panel: rasgos del evento (probador y entrenamiento)
+  static const char hx[] = "0123456789abcdef";
+  out.print("EV:"); out.print(ev.durMs); out.print(','); out.print(ev.centroidHz); out.print(',');
+  out.print(ev.peakDb); out.print(','); out.print(ev.nFrames); out.print(','); out.print(cls); out.print(',');
+  out.print((int)(pr[cls >= 0 ? cls : 0] * 100)); out.print(',');
+  for (int f = 0; f < snd::NF; f++)
+    for (int b = 0; b < snd::NB; b++) { uint8_t v = (uint8_t)ev.feat[f][b]; out.write(hx[v >> 4]); out.write(hx[v & 15]); }
+  out.println();
+
+  if (cfg.micMode != 2 || cls <= 0) return;
+  if (isPaused || sleeping || calTarget || bleState != 2 || headPeak > cfg.wakeThr) { sndReport(cls, "ignorado"); return; }
+
+  if (cls == 2) { action2(ev.onsetMs); return; }
+  // Sonido 1
+  if (cfg.dblMs == 0) { soundClick(1, ev.onsetMs, false); sndReport(1, "izq"); return; }
+  if (pendingS1 && ev.onsetMs - pendingOnset <= cfg.dblMs) {
+    pendingS1 = false;
+    soundClick(2, pendingOnset, false); sndReport(1, "der");
+  } else {
+    if (pendingS1) { soundClick(1, pendingOnset, false); sndReport(1, "izq"); }
+    pendingS1 = true; pendingOnset = ev.onsetMs;
+  }
+}
+
+void soundTask() {
+  if (!snd::running()) return;
+  snd::Event ev;
+  if (snd::poll(ev)) onSoundEvent(ev);
+
+  // Sin segundo sonido a tiempo: era un clic izquierdo
+  if (pendingS1 && millis() - pendingOnset > cfg.dblMs &&
+      !(snd::collecting() && snd::collectingOnset() - pendingOnset <= cfg.dblMs)) {
+    pendingS1 = false;
+    soundClick(1, pendingOnset, false); sndReport(1, "izq");
+  }
+
+  static unsigned long lastMic = 0, lastRate = 0;
+  static uint32_t lastFrames = 0, sps = 0;
+  static uint8_t micN = 0;
+  unsigned long now = millis();
+  if (now - lastRate >= 1000) {
+    sps = (snd::frames - lastFrames) * 256 * 1000UL / (now - lastRate);
+    lastFrames = snd::frames; lastRate = now;
+  }
+  if (now - lastMic >= 100) {
+    lastMic = now;
+    out.bleMute = (++micN & 1);   // por BLE a 5 Hz
+    out.print("ST:MIC,"); out.print(snd::levelDb, 1); out.print(','); out.print(snd::floorDb, 1);
+    out.print(','); out.print(snd::frameUs); out.print(','); out.println(sps);
+    out.bleMute = false;
+  }
+}
+
 // ---------------------------------------------------------------- Emparejamiento
 // Si hay un PC conectado, la ventana se aplica cuando se desconecte.
 void openPairWindow() {
@@ -602,6 +843,7 @@ void processTick(float dt) {
 
   float rateH = g[cfg.axisH] * cfg.signH;   // grados/s, + = derecha
   float rateV = g[cfg.axisV] * cfg.signV;   // grados/s, + = abajo
+  headPeak = fmaxf(headPeak * 0.97f, fmaxf(fabsf(rateH), fabsf(rateV)));
 
   if (millis() - lastTelemetry >= 50) {
     static uint8_t telemN = 0;
@@ -665,6 +907,8 @@ void processTick(float dt) {
   if (dx != 0 || dy != 0) {
     lastActivity = now;
     sendMouse((int8_t)dx, (int8_t)dy);
+    moveHist[moveIdx] = { (uint32_t)now, (int8_t)dx, (int8_t)dy };
+    moveIdx = (moveIdx + 1) % 64;
   }
 }
 
@@ -685,6 +929,9 @@ void setup() {
   if (!imuOk) out.println("ERR:IMU no responde");
   else calibrateOffset();
 
+  snd::loadModel();
+  applyMic();
+
   out.println("VER:" FW_VERSION);
   sendConfig();
   lastTick = millis();
@@ -693,7 +940,10 @@ void setup() {
 void loop() {
   pollInput();
   keyboardTask();
+  keyQueueTask();
   pairTask();
+  soundTask();
+  bleTxTask();
 
   if (pendingSave && millis() - lastChangeTime > 2000) {
     EEPROM.put(0, cfg);

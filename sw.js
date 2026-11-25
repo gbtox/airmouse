@@ -1,7 +1,7 @@
 // Service worker del panel HeadMouse: permite abrirlo sin internet.
 // Estrategia: primero la red (para tener siempre la última versión) y, si
 // falla, la copia guardada. Subir CACHE al publicar una versión nueva.
-const CACHE = 'headmouse-2.2';
+const CACHE = 'headmouse-3.0';
 const FILES = ['./', './index.html', './asistente.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {
